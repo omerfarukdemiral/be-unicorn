@@ -163,6 +163,11 @@ struct ContentView: View {
                 if args.contains("--start-paused") {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.isPaused = true }
                 }
+                // QA: --demo-lesson → mechanic→ders köprüsü popup'ını açılışta göster.
+                if let i = args.firstIndex(of: "--demo-lesson"), i + 1 < args.count {
+                    let mech = args[i + 1]
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { model.inspectedMechanic = mech }
+                }
                 // Not: --force-decision GameModel.init içinde de işlenir (model katmanına da).
             }
         }
@@ -331,7 +336,11 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var overlays: some View {
-        if !model.hasSeenOnboarding {
+        // #19: ders popup'ı EN ÜSTTE — herhangi bir ℹ/metrik/sonuç köprüsünden,
+        // başka bir modal açıkken bile gösterilebilir; kapanınca altındaki geri döner.
+        if let mech = model.inspectedMechanic {
+            LessonPopupView(model: model, theme: theme, mechanic: mech)
+        } else if !model.hasSeenOnboarding {
             OnboardingOverlay(model: model, theme: theme)
         } else if !model.companySetupComplete {
             CompanySetupOverlay(model: model, theme: theme)
@@ -353,6 +362,9 @@ struct ContentView: View {
             DailyCloseView(model: model, theme: theme, close: close)
         } else if let card = model.pendingEvent {
             DecisionCardView(model: model, theme: theme, card: card)
+        } else if let result = model.pendingResult {
+            // #26: karardan sonra kalıcı sonuç kartı (ders köprülü) — toast'ın yerine.
+            ResultCardView(model: model, theme: theme, result: result)
         } else if let report = model.pendingOfflineReport {
             OfflineReportView(theme: theme, report: report) { model.pendingOfflineReport = nil }
         } else if let dept = model.inspectedDept {

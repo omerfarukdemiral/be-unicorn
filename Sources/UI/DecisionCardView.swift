@@ -59,6 +59,11 @@ struct DecisionCardView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // Karar-anı metrik rozeti (#19/ÖNCELİK 1): kararı verirken şirketin can
+            // damarı tek bakışta görünür — tıklayınca ilgili Defter dersi açılır.
+            // Veriler GameModel'de zaten var; karar bağlamına buraya taşındı.
+            metricBadges
+
             VStack(spacing: Space.s2) {
                 // "Tek doğru cevap yok" ilkesi: tüm seçenekler GÖRSEL OLARAK EŞİT.
                 // (Eskiden ilk seçim tint dolgu + kalın kenarlıkla "önerilen" gibi
@@ -98,6 +103,54 @@ struct DecisionCardView: View {
         }
         .overlay(RoundedRectangle(cornerRadius: Radius.overlay).stroke(tint.opacity(0.32), lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 18, y: 6)
+    }
+
+    /// Karar-anı metrik rozeti satırı: Runway + LTV:CAC. Her biri dokunulabilir →
+    /// ilgili Defter dersi (#19 köprüsü). Sağlık rengiyle anlık durum sezgisi verir.
+    private var metricBadges: some View {
+        let infinite = model.netPerMonth >= 0
+        let runwayStr: String = infinite ? "∞" : (model.runwayMonths >= 99 ? "99+"
+            : (model.runwayMonths >= 12 ? "\(Int(model.runwayMonths.rounded()))ay"
+               : String(format: "%.1fay", model.runwayMonths)))
+        let runwayTint: Color = infinite ? Palette.success
+            : (model.runwayMonths < 3 ? Palette.danger
+               : model.runwayMonths < 6 ? Palette.warning : Palette.textSecondary)
+        let ratio = model.ltvCacRatio
+        let ratioStr = ratio > 0 ? String(format: "%.1f×", ratio) : "—"
+        let ratioTint: Color = ratio <= 0 ? Palette.textTertiary
+            : (ratio < 1 ? Palette.danger : ratio < 3 ? Palette.warning : Palette.success)
+        return HStack(spacing: Space.s2) {
+            metricBadge(icon: "fuelpump.fill", label: "Runway", value: runwayStr,
+                        tint: runwayTint, mechanic: "runway")
+            metricBadge(icon: "chart.line.uptrend.xyaxis", label: "LTV:CAC", value: ratioStr,
+                        tint: ratioTint, mechanic: "ltv-cac")
+        }
+    }
+
+    private func metricBadge(icon: String, label: String, value: String,
+                             tint: Color, mechanic: String) -> some View {
+        Button {
+            Haptics.selection(); model.inspectedMechanic = mechanic
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint)
+                Text(label)
+                    .font(.appText(10, .semibold))
+                    .foregroundStyle(theme.subtle)
+                Text(value)
+                    .font(.numberS)
+                    .foregroundStyle(tint)
+                Image(systemName: "info.circle")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(theme.subtle.opacity(0.7))
+            }
+            .padding(.horizontal, Space.s2 + 2).padding(.vertical, 6)
+            .background(theme.surfaceHigh, in: Capsule())
+            .overlay(Capsule().stroke(theme.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.pressable)
     }
 
     /// Etki ön-izleme satırı: + (yeşil ↑) / − (kırmızı ↓) ikonlu detay.

@@ -226,4 +226,28 @@ enum LessonsContent {
         guard let category else { return all }
         return all.filter { $0.category == category }
     }
+
+    /// Mekanik etiketine göre ilgili dersi bul (#19 mechanic→ders köprüsü).
+    /// HUD rozeti / karar-anı metrik / sonuç kartından "ilgili ders" açmak için.
+    /// Tam eşleşme yoksa nil — çağıran tarafta köprü gösterilmez.
+    static func lesson(for mechanic: String) -> LessonEntry? {
+        all.first { $0.mechanic == mechanic }
+    }
+}
+
+extension DecisionCategory {
+    /// Bu karar kategorisinin en alakalı Defter dersi mekaniği (#19 köprüsü).
+    /// Karar sonucu kartından "ilgili ders"e geçiş için — kart başına etiketleme
+    /// gelene dek (ÖNCELİK 3) kategori-bazlı makul varsayılan.
+    var lessonMechanic: String {
+        switch self {
+        case .investor:    return "equity"
+        case .crisis:      return "runway"
+        case .press:       return "morale"
+        case .team:        return "hiring"
+        case .product:     return "product-market-fit"
+        case .market:      return "marketing"
+        case .opportunity: return "strategy"
+        }
+    }
 }

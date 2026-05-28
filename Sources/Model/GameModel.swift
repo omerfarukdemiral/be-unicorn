@@ -18,6 +18,8 @@ final class GameModel: ObservableObject {
     @Published var pendingSeasonFinale: SeasonFinale? = nil  // sezon finali kutlaması + kalıcı ödül
     @Published var pendingScenarioResult: ScenarioResult? = nil  // senaryo deadline sonucu (başarı/başarısızlık overlay'i)
     @Published var pendingToast: String? = nil
+    @Published var pendingResult: DecisionResult? = nil   // karar sonucu kalıcı kartı (#26) + ders köprüsü
+    @Published var inspectedMechanic: String? = nil       // #19: ℹ/metrik/sonuç → ilgili Defter dersi
     @Published var inspectedDept: Int? = nil   // ofiste çalışana tıklanınca açılan kart
     @Published var founderTip: String = NarrativeContent.tips.first ?? ""
     /// HUD üstünde yüzen ±tutar çipi için son ayrık nakit hareketi (kazanç/harcama).
@@ -1158,7 +1160,14 @@ final class GameModel: ObservableObject {
         state.dailyDecisions += 1                       // günlük hedef ilerlemesi
         pendingEvent = nil
         scheduleNextDecision()
-        if let line = choice.resultLine { pendingToast = line }
+        // #26: sonuç artık 3.5sn toast'ta UÇMUYOR — kalıcı, kapatılabilir bir kartta
+        // gösterilir + "ilgili ders" köprüsü taşır (en zengin eğitici içerik korunur).
+        if let line = choice.resultLine {
+            pendingResult = DecisionResult(text: line,
+                                           speaker: card.speaker,
+                                           categoryRaw: card.category.rawValue,
+                                           mechanic: card.category.lessonMechanic)
+        }
         Feedback.tap()   // karar verildi
         clamp()
         checkDailyCompletion()
