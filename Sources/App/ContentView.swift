@@ -30,6 +30,7 @@ struct ContentView: View {
     @State private var tab: GameTab = .office
     @State private var topToast: TopToast? = nil
     @State private var toastToken = 0
+    @State private var soundEnabled = AudioManager.shared.isEnabled
     @Environment(\.scenePhase) private var scenePhase
     @Namespace private var tabNS
 
@@ -86,8 +87,12 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active: model.refreshOnForeground()
-            case .background, .inactive: model.saveOnBackground()
+            case .active:
+                model.refreshOnForeground()
+                AudioManager.shared.resume()   // ses motorunu sürdür
+            case .background, .inactive:
+                model.saveOnBackground()
+                AudioManager.shared.pause()    // arka planda ses motorunu duraklat
             @unknown default: break
             }
         }
@@ -172,12 +177,30 @@ struct ContentView: View {
         }
     }
 
+    /// Sesi aç/kapa toggle'ı (tab bar başında küçük ikon). Durum AudioManager + UserDefaults'ta.
+    private var soundToggle: some View {
+        Button {
+            soundEnabled = AudioManager.shared.toggle()   // kalıcı; açınca küçük onay sesi çalar
+            Haptics.selection()
+        } label: {
+            Image(systemName: soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(soundEnabled ? theme.accent : Palette.textTertiary)
+                .frame(width: 34)
+                .padding(.vertical, Space.s2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(soundEnabled ? "Sesi kapat" : "Sesi aç")
+    }
+
     private var tabBar: some View {
         HStack(spacing: 2) {
+            soundToggle
             ForEach(GameTab.allCases, id: \.self) { t in
                 let selected = tab == t
                 Button {
-                    Haptics.selection()
+                    Feedback.select()
                     withAnimation(Motion.smooth) { tab = t }
                 } label: {
                     VStack(spacing: 3) {

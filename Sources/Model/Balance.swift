@@ -263,27 +263,29 @@ enum Balance {
 
     // MARK: Funding evreleri
     static let stages: [StageDef] = [
+        // Aurora Dark: zemin hep koyu (#0B0E14 ailesi, evreye çok hafif tint),
+        // yüzey #161B26 ailesinden, accent rampası evre büyüdükçe güzelleşir.
         .init(id: 0, name: "Garaj", title: "Hacker",
               valuationTarget: 0, raiseAmount: 0, equityGiven: 0,
-              bgHex: "14161F", accentHex: "FF9F5A", surfaceHex: "1E212E", officeName: "Garaj"),
+              bgHex: "0B0E14", accentHex: "22D3EE", surfaceHex: "161B26", officeName: "Garaj"),
         .init(id: 1, name: "Pre-seed", title: "Kurucu",
               valuationTarget: 500_000, raiseAmount: 150_000, equityGiven: 0.10,
-              bgHex: "121826", accentHex: "5B8DEF", surfaceHex: "1B2336", officeName: "Paylaşımlı Ofis"),
+              bgHex: "0B0F16", accentHex: "38BDF8", surfaceHex: "151C28", officeName: "Paylaşımlı Ofis"),
         .init(id: 2, name: "Seed", title: "CEO",
               valuationTarget: 3_000_000, raiseAmount: 800_000, equityGiven: 0.15,
-              bgHex: "101A22", accentHex: "4FD1A1", surfaceHex: "16242C", officeName: "İlk Ofis"),
+              bgHex: "0B1014", accentHex: "4FD1A1", surfaceHex: "151E26", officeName: "İlk Ofis"),
         .init(id: 3, name: "Series A", title: "CEO",
               valuationTarget: 15_000_000, raiseAmount: 4_000_000, equityGiven: 0.18,
-              bgHex: "16121F", accentHex: "C77DFF", surfaceHex: "201A2C", officeName: "Açık Plan Kat"),
+              bgHex: "0C0E16", accentHex: "7C5CFF", surfaceHex: "171A2A", officeName: "Açık Plan Kat"),
         .init(id: 4, name: "Series B", title: "CEO",
               valuationTarget: 75_000_000, raiseAmount: 20_000_000, equityGiven: 0.15,
-              bgHex: "1A1410", accentHex: "FFD166", surfaceHex: "271E16", officeName: "Şirket Katı"),
+              bgHex: "0E0F14", accentHex: "FFB454", surfaceHex: "1B1B26", officeName: "Şirket Katı"),
         .init(id: 5, name: "Series C", title: "CEO",
               valuationTarget: 300_000_000, raiseAmount: 150_000_000, equityGiven: 0.12,
-              bgHex: "0F1A18", accentHex: "2EE6C5", surfaceHex: "152624", officeName: "Plaza"),
+              bgHex: "0B1013", accentHex: "2EE6C5", surfaceHex: "141F25", officeName: "Plaza"),
         .init(id: 6, name: "Unicorn", title: "Unicorn CEO",
               valuationTarget: 1_000_000_000, raiseAmount: 0, equityGiven: 0,
-              bgHex: "12101F", accentHex: "FF6FB5", surfaceHex: "1D182E", officeName: "Kampüs"),
+              bgHex: "0D0C16", accentHex: "FF6FB5", surfaceHex: "1A1828", officeName: "Kampüs"),
     ]
     static var stageCount: Int { stages.count }
 

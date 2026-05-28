@@ -23,6 +23,20 @@ enum NarrativeContent {
         "Yatırımcı \"akıllı para\" mı, sadece para mı? Farkı sormayı unut.",
         "Fiyatı artırmaktan korkmak, değerini küçümsemektir.",
         "Ekibe verilen her söz bir sözleşmedir. Vaat etmeden önce düşün.",
+        "Tek müşteriye bağımlılık, görünmez bir tasmadır. Geliri çeşitlendir.",
+        "Teknik borç faizle birikir; bir sprint'lik temizlik bir çeyreklik kriz önler.",
+        "Klonlar özelliği kopyalar ama topluluğunu ve markanı kopyalayamaz.",
+        "Kötü haberi sen duyur; basın senin yerine duyurursa kontrolü kaybedersin.",
+        "Default alive: kimseye muhtaç olmadan hayatta kalabildiğin gün özgürsün.",
+        "Sözleşmesiz kod, sahibi belirsiz koddur. Fikri mülkiyetini gün bir mühürle.",
+        "Kurucu tükenirse şirket tükenir. Dinlenmek bir lüks değil, bir görevdir.",
+        "Stratejik para hızlıdır ama bağlar getirir; bağların bedelini önceden hesapla.",
+        "Bulut faturasını izlemeyen, runway'ini sessizce yakar.",
+        "Downturn'da en güçlü silah disiplindir, panik değil.",
+        "SOC2 ve uyum sıkıcıdır ama kurumsal kapıların anahtarıdır.",
+        "Hızlı büyüme mimariyi test eder; ölçeklenmeyen kod en pahalı borçtur.",
+        "İnfluencer'ın itibarı senin itibarındır; ortağını dikkatle seç.",
+        "Çeşitli ekip daha iyi karar alır; tek tip oda kör nokta üretir.",
     ]
 
     static let onHire: [String] = [
@@ -33,6 +47,10 @@ enum NarrativeContent {
         "Bir koltuk daha doldu — artık daha hızlısınız.",
         "İyi işe alım her şeyin başlangıcıdır.",
         "Takımda taze bir bakış açısı var. İşler değişebilir.",
+        "Yeni bir kafa, yeni sorular soruyor. Konfor zonu sallandı.",
+        "İşe alım kapandı; onboarding başladı. İlk hafta her şeyi belirler.",
+        "Birini daha ikna ettin — vizyon satmak da bir yetenek.",
+        "Ekip genişledi; artık iletişim de bir tasarım problemi.",
     ]
 
     static let onMilestone: [String] = [
@@ -41,6 +59,9 @@ enum NarrativeContent {
         "Ekip bu anı hak etti. Bir sonraki hedefe bakma vakti.",
         "İlerleme bir strateji değil, bir alışkanlıktır.",
         "Kutlayın, ama gözler hep ileriye bakmalı.",
+        "Dün imkânsız görünen, bugün geride kaldı. Çıta yükseliyor.",
+        "Bu eşik bir kanıt: yöntemin işe yarıyor. Ölçekle.",
+        "Grafik yukarı kıvrıldı. Şimdi onu kıvrık tutma vakti.",
     ]
 
     static let onCrisisResolved: [String] = [
@@ -48,6 +69,10 @@ enum NarrativeContent {
         "Her kriz bir öğretmendir. Ders alındı.",
         "Baskı altında karar almak asıl liderlik testiydi. Geçtiniz.",
         "Zor günler bitiyor; geriye kalan deneyim kalıyor.",
+        "Fırtına dindi. Ekip birbirine daha çok güveniyor şimdi.",
+        "Yangını söndürdünüz; şimdi neden çıktığını anlama zamanı.",
+        "Krizden çıkan ekip, krizden önceki ekipten daha güçlüdür.",
+        "Bir kurşunu daha savuşturdun. Soğukkanlılık kazandırdı.",
     ]
 
     static func runwayTip(months: Double) -> String {

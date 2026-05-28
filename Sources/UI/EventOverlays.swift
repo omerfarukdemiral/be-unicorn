@@ -18,6 +18,35 @@ private struct CelebrationRing: View {
     }
 }
 
+/// Hafif konfeti yağmuru — yukarıdan düşen renkli parçacıklar (sadece kutlama).
+private struct ConfettiBurst: View {
+    var colors: [Color] = [Palette.unicorn, Palette.gold, Palette.success, Color(hex: "5B8DEF")]
+    private let count = 26
+    @State private var fall = false
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                ForEach(0..<count, id: \.self) { i in
+                    let seed = Double((i * 73) % 100) / 100
+                    let x = seed * geo.size.width
+                    let delay = Double((i * 37) % 60) / 100
+                    let size = 5 + (Double((i * 53) % 5))
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(colors[i % colors.count])
+                        .frame(width: size, height: size * 1.6)
+                        .rotationEffect(.degrees(fall ? Double((i * 90) % 360) + 180 : 0))
+                        .position(x: x, y: fall ? geo.size.height + 40 : -40)
+                        .opacity(fall ? 0 : 1)
+                        .animation(.easeIn(duration: 2.0 + seed).delay(delay), value: fall)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .onAppear { fall = true }
+    }
+}
+
 /// Funding turu kutlaması (kilometre taşı / prestij anı).
 struct FundingRoundView: View {
     @ObservedObject var model: GameModel
@@ -30,6 +59,10 @@ struct FundingRoundView: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.6).ignoresSafeArea()
+            if appeared {
+                ConfettiBurst(colors: [Palette.gold, theme.accent, Palette.success])
+                    .ignoresSafeArea()
+            }
             VStack(spacing: Space.s4) {
                 // Hero ikon — büyük SF Symbol + parıltı halkası, sevinçli milestone.
                 ZStack {
@@ -37,10 +70,18 @@ struct FundingRoundView: View {
                     Image(systemName: Icons.Screen.funding)
                         .font(.system(size: 60, weight: .bold))
                         .foregroundStyle(theme.accent)
+                        .shadow(color: theme.accent.opacity(0.5), radius: 12)
                         .scaleEffect(appeared ? 1 : 0.4)
                 }
                 .frame(height: 90)
-                Text("\(stage.name) Turu Kapandı!")
+
+                // "Tur kapandı" üst etiket — gold prestij vurgusu.
+                Text("YATIRIM TURU KAPANDI")
+                    .font(.eyebrow).tracking(1.4)
+                    .foregroundStyle(Palette.gold)
+                    .padding(.horizontal, Space.s3).padding(.vertical, Space.s1)
+                    .background(Palette.gold.opacity(0.13), in: Capsule())
+                Text(stage.name)
                     .font(.titleL)
                     .foregroundStyle(theme.accent)
                 Text("Şirketin büyüyor. Yeni ofis: \(stage.officeName).")
@@ -86,46 +127,105 @@ struct FundingRoundView: View {
     }
 }
 
-/// Unicorn kazanma ekranı.
+/// Unicorn kazanma ekranı — görkemli final: konfeti + parıltı + başarı özeti.
 struct WinView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
     @State private var appeared = false
+    @State private var glowPulse = false
+
+    private var league: LeagueDef { model.currentLeague }
+    private var seasonTitle: SeasonTitleDef { model.currentSeasonTitle }
+
     var body: some View {
         ZStack {
-            Color(hex: "12101F").opacity(0.92).ignoresSafeArea()
+            // Derin gece zemin + unicorn parıltısı (üstten ışık).
+            Color(hex: "12101F").opacity(0.94).ignoresSafeArea()
+            RadialGradient(colors: [Palette.unicorn.opacity(0.22), .clear],
+                           center: .top, startRadius: 20, endRadius: 480)
+                .ignoresSafeArea()
+            if appeared { ConfettiBurst().ignoresSafeArea() }
+
             VStack(spacing: Space.s4) {
-                // Zafer ikonu — taç, $1B başarı sembolü + parıltı.
+                // Zafer ikonu — taç, çift parıltı halkası + nabız glow.
                 ZStack {
-                    if appeared { CelebrationRing(color: Palette.unicorn) }
+                    if appeared {
+                        CelebrationRing(color: Palette.unicorn)
+                        CelebrationRing(color: Palette.gold)
+                    }
                     Image(systemName: Icons.Screen.win)
-                        .font(.system(size: 80, weight: .bold))
+                        .font(.system(size: 84, weight: .bold))
                         .foregroundStyle(Palette.unicorn)
+                        .shadow(color: Palette.unicorn.opacity(glowPulse ? 0.9 : 0.4),
+                                radius: glowPulse ? 28 : 14)
                         .scaleEffect(appeared ? 1 : 0.5)
                 }
-                .frame(height: 100)
+                .frame(height: 108)
+
                 Text("UNICORN!")
                     .font(.displayXL)
                     .foregroundStyle(Palette.unicorn)
-                Text("Şirketin $1 milyar değerlemeye ulaştı.\nGarajdan zirveye çıktın, kurucu.")
+                    .shadow(color: Palette.unicorn.opacity(0.5), radius: 12)
+
+                // "$1 MİLYAR" vurgusu — gold rozet.
+                Text("$1 MİLYAR DEĞERLEME")
+                    .font(.eyebrow)
+                    .tracking(1.5)
+                    .foregroundStyle(Palette.gold)
+                    .padding(.horizontal, Space.s3).padding(.vertical, Space.s1)
+                    .background(Palette.gold.opacity(0.14), in: Capsule())
+                    .overlay(Capsule().stroke(Palette.gold.opacity(0.4), lineWidth: 1))
+
+                Text("Garajdan zirveye çıktın, kurucu.\nBu bir efsanenin başlangıcı.")
                     .font(.bodyL)
                     .foregroundStyle(theme.text).multilineTextAlignment(.center)
-                Text("Hisse oranın: %\(Int(model.founderEquity * 100))")
-                    .font(.numberM)
-                    .foregroundStyle(theme.subtle)
+
+                // Başarı özeti — hisse + lig + sezon ünvanı.
+                VStack(spacing: Space.s2) {
+                    summaryLine("Hisse oranın", "%\(Int(model.founderEquity * 100))",
+                                icon: "chart.pie.fill", tint: Palette.gold)
+                    summaryLine(league.name, "Lig", icon: league.icon,
+                                tint: Color(hex: league.colorHex))
+                    summaryLine(seasonTitle.name, "Sezon \(model.seasonNumber) · \(model.quarterNumber). Çeyrek",
+                                icon: seasonTitle.icon, tint: Color(hex: seasonTitle.colorHex))
+                }
+                .padding(Space.s4)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.m))
+                .overlay(RoundedRectangle(cornerRadius: Radius.m)
+                    .stroke(Palette.unicorn.opacity(0.25), lineWidth: 1))
+
                 Button { Haptics.tap(); model.dismissWin() } label: {
                     Text("İmparatorluğu Yönetmeye Devam").font(.bodyL)
                         .modifier(ButtonChrome(bg: Palette.unicorn, fg: .white,
                                                glow: Palette.unicorn, height: AppButton.height))
                 }
                 .buttonStyle(.pressable)
+                .padding(.top, Space.s1)
             }
             .padding(Space.s6).frame(maxWidth: 350)
             .padding(.horizontal, Space.s5)
+            .scaleEffect(appeared ? 1 : 0.85).opacity(appeared ? 1 : 0)
         }
         .onAppear {
             Haptics.success()
             withAnimation(Motion.bouncy) { appeared = true }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                glowPulse = true
+            }
+        }
+    }
+
+    private func summaryLine(_ title: String, _ sub: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: Space.s2) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.numberM).foregroundStyle(theme.text)
+                Text(sub).font(.labelText).foregroundStyle(theme.subtle)
+            }
+            Spacer()
         }
     }
 }

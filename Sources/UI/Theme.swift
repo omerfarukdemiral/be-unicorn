@@ -22,11 +22,14 @@ struct Theme {
     var subtle: Color { Palette.textTertiary }
     var textQuaternary: Color { Palette.textQuaternary }
 
-    // MARK: Yüzey katmanları
-    /// Panel zemini.
+    // MARK: Yüzey katmanları (Aurora Dark — koyu baz üstünde katman netliği)
+    /// Panel zemini (evre yüzeyi, #161B26 ailesi).
     var surfaceLow: Color { surface }
-    /// Panel içi yükseltilmiş hücre (kart yüzeyinden bir ton açık).
-    var surfaceHigh: Color { .white.opacity(0.06 + Double(stage) * 0.006) }
+    /// Yükseltilmiş yüzey tabanı (~#1F2735) — overlay/öne çıkan panel için.
+    var surfaceElevated: Color { Color(hex: "1F2735") }
+    /// Panel içi yükseltilmiş hücre: yüzey üstüne beyaz tint + hafif accent sıcaklığı,
+    /// evre büyüdükçe ışıltı artar.
+    var surfaceHigh: Color { .white.opacity(0.05 + Double(stage) * 0.006) }
 
     // MARK: Kenarlık
     /// Standart kart stroke — evre büyüdükçe hafif ışıldar.
@@ -57,9 +60,11 @@ struct PanelCard<Content: View>: View {
                     .stroke(highlighted ? theme.hairlineStrong : theme.hairline,
                             lineWidth: highlighted ? 1.5 : 1)
             )
-            .shadow(color: .black.opacity(0.22), radius: theme.shadowRadius, y: 3)
-            .shadow(color: highlighted ? theme.accent.opacity(0.22) : .clear,
-                    radius: highlighted ? 12 : 0, y: 4)
+            // Koyu baz üstünde net derinlik.
+            .shadow(color: .black.opacity(0.28), radius: theme.shadowRadius, y: 3)
+            // Aurora glow: seçili kartta accent ışıması, evre büyüdükçe biraz daha güçlü.
+            .shadow(color: highlighted ? theme.accent.opacity(0.22 + Double(theme.stage) * 0.02) : .clear,
+                    radius: highlighted ? 12 + CGFloat(theme.stage) : 0, y: 4)
     }
 }
 

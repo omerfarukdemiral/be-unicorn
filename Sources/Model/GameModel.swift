@@ -186,6 +186,7 @@ final class GameModel: ObservableObject {
         state.ownedItems[id, default: 0] += 1
         // Anlık küçük moral dokunuşu — yeni eşya hevesi (hedef zaten yukarı çeker).
         if item.moraleBonus > 0 { state.morale = min(100, state.morale + 1) }
+        Feedback.tap()   // eşya alımı geri bildirimi
         save()
         return true
     }
@@ -361,6 +362,7 @@ final class GameModel: ObservableObject {
         state.dailyHires += 1                          // günlük hedef ilerlemesi
         state.morale = min(100, state.morale + 1.5)   // yeni ekip arkadaşı hevesi
         setTip(NarrativeContent.onHire)
+        Feedback.tap()   // işe alım geri bildirimi
         checkDailyCompletion()
         save()
         return true
@@ -432,6 +434,7 @@ final class GameModel: ObservableObject {
         } else {
             pendingFundingStage = state.stage
         }
+        Feedback.celebrate()   // tur toplama / win kutlaması
         return true
     }
 
@@ -592,6 +595,12 @@ final class GameModel: ObservableObject {
                                          toTier: state.leagueTier,
                                          standings: standings,
                                          playerRank: rank)
+        // Çeyrek kapanışı: terfi → kutlama, düşüş → uyarı, sabit → tok kapanış.
+        switch outcome {
+        case .promote: Feedback.celebrate()
+        case .demote:  Feedback.warning()
+        case .stay:    Feedback.close()
+        }
         save()
     }
 
@@ -650,6 +659,7 @@ final class GameModel: ObservableObject {
             title: SeasonSystem.title(forSeason: earnedSeason),
             bonusGained: SeasonSystem.bonusForCompleting(season: earnedSeason),
             totalBonusAfter: SeasonSystem.totalMultiplier(seasonsCompleted: earnedSeason) - 1)
+        Feedback.celebrate()   // sezon finali — görkemli kutlama
     }
 
     /// "Yeni Sezon" — KALICI ödülü uygula (çarpan + ünvan koleksiyonu) + sezon sayaçlarını sıfırla.
@@ -759,6 +769,7 @@ final class GameModel: ObservableObject {
 
         pendingDailyClose = DailyClose(streak: state.streak,
                                        streakMoraleBonus: streakMoraleBonus)
+        Feedback.success()   // günlük hedef kapanışı / kutlama
         save()
     }
 
@@ -846,6 +857,7 @@ final class GameModel: ObservableObject {
                                          success: success,
                                          doneValue: result.done,
                                          targetValue: result.target)
+        if success { Feedback.success() } else { Feedback.failure() }   // sprint sonucu
         save()
     }
 
@@ -871,12 +883,16 @@ final class GameModel: ObservableObject {
             return
         }
         pendingEvent = card
+        Feedback.decision()   // karar kartı geldi
     }
 
     /// Acil/kriz kartını hemen tetikle (örn. düşük runway).
     func forceDecisionIfAvailable() {
         guard pendingEvent == nil else { return }
-        if let card = DecisionSystem.pick(for: self, state: state) { pendingEvent = card }
+        if let card = DecisionSystem.pick(for: self, state: state) {
+            pendingEvent = card
+            Feedback.decision()   // acil karar kartı geldi
+        }
     }
 
     func resolve(_ choice: DecisionChoice) {
@@ -890,6 +906,7 @@ final class GameModel: ObservableObject {
         pendingEvent = nil
         scheduleNextDecision()
         if let line = choice.resultLine { pendingToast = line }
+        Feedback.tap()   // karar verildi
         clamp()
         checkDailyCompletion()
         save()
@@ -939,6 +956,7 @@ final class GameModel: ObservableObject {
                 state.headcount[dept] -= 1
                 state.reputation = max(0, state.reputation - 1)
                 pendingToast = "\(Balance.departments[dept].name) ekibinden biri istifa etti."
+                Feedback.warning()   // istifa — kritik uyarı
             }
         }
     }
@@ -956,6 +974,7 @@ final class GameModel: ObservableObject {
     private func triggerBankruptcy() {
         guard !pendingBankruptcy else { return }
         pendingBankruptcy = true
+        Feedback.failure()   // iflas
         // Founder XP = ulaşılan en yüksek evre + değerlemeden öğrenilen ders
         state.founderXP += Double(state.stageReached) + 1
         state.bankruptcies += 1

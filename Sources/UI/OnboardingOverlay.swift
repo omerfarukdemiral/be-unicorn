@@ -6,11 +6,15 @@ struct OnboardingOverlay: View {
     var theme: Theme
     @State private var step = 0
 
-    /// Adım başlığı ve açıklaması.
+    /// Adım başlığı ve açıklaması — her adım tek cümle + ikon.
     private let steps: [(String, String, String)] = [
         (Icons.Screen.onboard0, "Garajdan Zirveye", "Bir startup kurdun. Hedefin: $1 milyar değerlemeye ulaşıp Unicorn olmak."),
         (Icons.Screen.onboard1, "Ekibini Büyüt",    "Mühendis, pazarlamacı, satışçı işe al. Her çalışan maaş ister — nakdini izle."),
-        (Icons.Screen.onboard2, "Kararlar Seni Bekler", "Yatırımcılar, krizler, basın... Doğru kararlar seni zirveye taşır. Hazır mısın?")
+        (Icons.Screen.onboard2, "Kararlar Seni Bekler", "Yatırımcılar, krizler, basın... Doğru kararlar seni zirveye taşır."),
+        ("trophy.fill",         "Lig & Çeyrek",     "Her çeyrek performansın puanlanır; iyi oyna, Garaj Ligi'nden Unicorn Ligi'ne yüksel."),
+        ("target",              "Günlük Hedef & Streak", "Her gün küçük bir hedefi tamamla, streak'ini büyüt ve seriyi koparma."),
+        ("flag.checkered",      "Haftalık Sprint",  "Haftalık sprintte rakiplerinle yarış, ilk sırada bitirip ödül kap."),
+        ("square.grid.3x3.fill", "Ofis Krokisi",    "Ofisini koltuk ve eşyalarla döşe; her yerleşim ekibine küçük bonuslar verir.")
     ]
 
     var body: some View {

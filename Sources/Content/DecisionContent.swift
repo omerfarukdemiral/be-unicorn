@@ -373,5 +373,249 @@ enum DecisionContent {
                       result: "O zamanı ürüne harcadın.")
             ]),
 
+        // MARK: - Ölçek & Altyapı
+
+        DecisionCard("scaling-crisis", category: .crisis, speaker: "Altyapı Ekibi", icon: "📈",
+            prompt: "Kullanıcı sayısı patladı ama mimari kaldıramıyor. Her gün 3 kez çöküyor. Teknik borç kapıyı tekmeliyor.",
+            trigger: .minUsers(2_000),
+            choices: [
+                .init("Mimariyi yeniden yaz", detail: "−nakit, −hız kısa vade, +sağlamlık", effects: [.cash(-25_000), .morale(-6), .reputation(6), .usersPercent(-0.04)],
+                      result: "Acı bir refactor turu; ama temel artık sağlam."),
+                .init("Yama üstüne yama", detail: "Hızlı ama kırılgan", effects: [.cash(-5_000), .reputation(-5), .morale(-3)],
+                      result: "Bant yapıştırdın; bir sonraki çöküş zaman meselesi.")
+            ]),
+
+        DecisionCard("cloud-bill-shock", category: .crisis, speaker: "Mali İşler", icon: "☁️",
+            prompt: "Bulut faturası bir gecede 4 katına çıktı; bir job sonsuz döngüye girmiş. Nakit eriyor.",
+            trigger: .minUsers(1_000),
+            choices: [
+                .init("Acil maliyet optimizasyonu", detail: "−nakit kısa, +verim", effects: [.cash(-8_000), .morale(-4), .reputation(3)],
+                      result: "FinOps ekibi devreye girdi; harcama dizginlendi."),
+                .init("Görmezden gel, büyümeye odaklan", detail: "Riskli", effects: [.cashPercent(-0.15), .morale(2)],
+                      result: "Fatura sızdırmaya devam ediyor.")
+            ]),
+
+        DecisionCard("technical-debt-vote", category: .product, speaker: "Mühendislik Lideri", icon: "🧱",
+            prompt: "Ekip iki çeyrektir özellik fışkırttı, hiç temizlik yapmadı. Bir sprint'i tamamen borç ödemeye ayıralım mı?",
+            trigger: .minStage(2),
+            choices: [
+                .init("Temizlik sprint'i yap", detail: "−hız kısa, +moral, +sağlamlık", effects: [.morale(8), .reputation(4), .usersPercent(-0.02)],
+                      result: "Ekip nefes aldı; build artık yeşil."),
+                .init("Özellik basmaya devam", detail: "+kullanıcı, −moral", effects: [.usersPercent(0.06), .morale(-6)],
+                      result: "Roadmap doldu ama borç faiziyle birikiyor.")
+            ]),
+
+        // MARK: - Müşteri & Gelir Krizleri
+
+        DecisionCard("whale-churn", category: .crisis, speaker: "Müşteri Başarısı", icon: "🐋",
+            prompt: "Gelirinin %30'unu tek başına getiren en büyük kurumsal müşterin sözleşmeyi yenilemiyor.",
+            trigger: .minStage(2),
+            choices: [
+                .init("CEO seviyesinde kurtarma operasyonu", detail: "−nakit, müşteriyi tut", effects: [.cash(-12_000), .reputation(4), .morale(2)],
+                      result: "Özel indirim ve yol haritası sözüyle kaldılar — kıl payı."),
+                .init("Bırak gitsin, çeşitlendir", detail: "−gelir, +bağımsızlık", effects: [.cashPercent(-0.25), .morale(-5), .reputation(2)],
+                      result: "Tek müşteriye bağımlılık dersini pahalı öğrendin.")
+            ]),
+
+        DecisionCard("pricing-experiment", category: .product, speaker: "Büyüme Ekibi", icon: "🧪",
+            prompt: "Kullanıcıların yarısına %40 daha yüksek fiyat gösteren bir A/B testi öneriliyor. Etik mi, akıllı mı?",
+            trigger: .minUsers(1_500),
+            choices: [
+                .init("Testi başlat, veriye bak", detail: "+gelir verisi, −itibar riski", effects: [.cashPercent(0.12), .reputation(-3), .morale(1)],
+                      result: "Fiyat esnekliği netleşti; biraz dedikodu çıktı."),
+                .init("Şeffaf tek fiyat", detail: "+güven, −optimizasyon", effects: [.reputation(6), .morale(4)],
+                      result: "Herkese aynı fiyat; topluluk güveni arttı.")
+            ]),
+
+        DecisionCard("enterprise-rfp", category: .opportunity, speaker: "Satış Direktörü", icon: "📑",
+            prompt: "Devasa bir kurumun ihalesini kazanmak üzeresin ama 6 aylık özel entegrasyon ve SOC2 sertifikası istiyorlar.",
+            once: true, trigger: .minStage(3),
+            choices: [
+                .init("İhaleye gir, kaynağı ayır", detail: "+büyük nakit, −odak", effects: [.cash(150_000), .headcount(dept: 3, delta: 1), .morale(-4), .reputation(10)],
+                      result: "Logoyu kazandın; ekip uyum maratonuna girdi."),
+                .init("Vazgeç, ürüne odaklan", detail: "+odak, −büyük fırsat", effects: [.morale(5), .reputation(2)],
+                      result: "Kısa vadeli cazibeye direndin.")
+            ]),
+
+        // MARK: - Kurucu & İnsan
+
+        DecisionCard("founder-burnout", category: .team, speaker: "İç Ses", icon: "🪫",
+            prompt: "Aylardır uyumuyorsun. Ellerin titriyor, kararların bulanık. Bedenin dur diyor.",
+            trigger: .lowMorale(40),
+            choices: [
+                .init("Bir hafta tamamen kopart", detail: "−ivme kısa, +moral büyük", effects: [.morale(16), .moraleTargetBonus(3), .reputation(2)],
+                      result: "Dinlenmiş bir zihinle döndün; karar kaliten arttı."),
+                .init("İçeceğe devam, dişini sık", detail: "Kısa vade üretim, uzun vade risk", effects: [.morale(-10), .usersPercent(0.03)],
+                      result: "Bir sprint daha kazandın ama tank boşalıyor.")
+            ]),
+
+        DecisionCard("cofounder-departure", category: .team, speaker: "Kurucu Ortağın", icon: "🚪",
+            prompt: "Kurucu ortağın \"ben yokum\" dedi ve ayrılıyor. Cap table'da %20'si var. Ekip sarsıldı.",
+            once: true, trigger: .minStage(2),
+            choices: [
+                .init("Adil vesting ile uğurla", detail: "−nakit, +temiz cap table", effects: [.cash(-30_000), .equity(0.12), .morale(-6), .reputation(4)],
+                      result: "Dostça ayrılık; hisseler düzene girdi."),
+                .init("Hukuki kavgaya gir", detail: "−moral, −itibar, hisse koru", effects: [.equity(0.18), .morale(-12), .reputation(-8)],
+                      result: "Mahkeme uzadı; ekip morali dibi gördü.")
+            ]),
+
+        DecisionCard("talent-raid", category: .team, speaker: "Rakip CEO", icon: "🎯",
+            prompt: "Rakip şirket en iyi 3 mühendisine aynı anda agresif teklifler yaptı. Kapıdan kaçacaklar.",
+            trigger: .minStage(2),
+            choices: [
+                .init("Hisse + maaş paketiyle tut", detail: "−nakit, −hisse, ekip kalır", effects: [.cash(-10_000), .equity(-0.03), .morale(8)],
+                      result: "Üçü de kaldı; sadakat hisseyle mühürlendi."),
+                .init("İkisini feda et, birini kurtar", detail: "−kapasite, +nakit", effects: [.headcount(dept: 0, delta: -2), .morale(-7), .cash(5_000)],
+                      result: "İki koltuk boşaldı; en kritik isim kaldı.")
+            ]),
+
+        DecisionCard("diversity-push", category: .team, speaker: "İK & Kültür", icon: "🌈",
+            prompt: "Ekip tek tip oldu. Bilinçli çeşitlilik programı zaman ve para ister ama uzun vadede daha güçlü kararlar getirir.",
+            once: true, trigger: .minStage(2),
+            choices: [
+                .init("Programı başlat", detail: "−nakit, +moral, +itibar", effects: [.cash(-6_000), .morale(7), .reputation(8)],
+                      result: "Farklı sesler masada; tartışmalar zenginleşti."),
+                .init("Sonraya bırak", detail: "+odak kısa vade", effects: [.morale(-2)],
+                      result: "\"Önce büyüyelim\" dedin; bazıları hayal kırıklığına uğradı.")
+            ]),
+
+        // MARK: - Regülasyon & Hukuk
+
+        DecisionCard("gdpr-audit", category: .crisis, speaker: "Veri Koruma Otoritesi", icon: "📜",
+            prompt: "Bir veri koruma otoritesi denetim başlattı. Eksiklerin var; ceza ciro bazlı olabilir.",
+            trigger: .minUsers(3_000),
+            choices: [
+                .init("Tam uyum, danışman tut", detail: "−nakit ağır, +itibar", effects: [.cash(-22_000), .reputation(9), .morale(-3)],
+                      result: "Temiz çıktın; sertifika bir satış argümanı oldu."),
+                .init("Minimum düzeltme yap", detail: "−nakit az, ceza riski", effects: [.cash(-5_000), .reputation(-6)],
+                      result: "Şimdilik geçtin ama dosya açık kaldı.")
+            ]),
+
+        DecisionCard("patent-troll", category: .crisis, speaker: "Hukuk Müşaviri", icon: "📿",
+            prompt: "Bir patent trolü çekirdek özelliğin için ihlal davası açtı. Davalar yıllarca sürer ve yorar.",
+            trigger: .minStage(3),
+            choices: [
+                .init("Mahkemede savaş", detail: "−nakit, +emsal güç", effects: [.cash(-18_000), .reputation(5), .morale(-4)],
+                      result: "Pahalı ama trolü püskürttün; sektöre mesaj verdin."),
+                .init("Sus payı öde, kurtul", detail: "−nakit hızlı, kötü emsal", effects: [.cash(-12_000), .reputation(-4)],
+                      result: "Sorun kapandı ama troller artık adresini biliyor.")
+            ]),
+
+        DecisionCard("ip-ownership", category: .crisis, speaker: "Eski Çalışan", icon: "©️",
+            prompt: "Erken dönem bir geliştirici, kodun bir kısmının kendisine ait olduğunu iddia ediyor. Sözleşme belirsizdi.",
+            once: true, trigger: .minStage(2),
+            choices: [
+                .init("Adil bedel öde, hakları al", detail: "−nakit, +temiz IP", effects: [.cash(-15_000), .reputation(3), .morale(2)],
+                      result: "Fikri mülkiyet artık tartışmasız şirketin."),
+                .init("Reddet, riske gir", detail: "+nakit, hukuki bulut", effects: [.reputation(-5), .morale(-3)],
+                      result: "Tehdit havada asılı; due diligence'ta sorun olabilir.")
+            ]),
+
+        // MARK: - Basın & Kriz
+
+        DecisionCard("pr-scandal", category: .press, speaker: "İletişim Direktörü", icon: "🎤",
+            prompt: "Bir çalışanın eski tweet'leri ortaya çıktı ve şirketle ilişkilendiriliyor. Sosyal medyada linç başladı.",
+            trigger: .minReputation(40),
+            choices: [
+                .init("Net açıklama yap, değerleri vurgula", detail: "+itibar uzun vade, −moral kısa", effects: [.reputation(7), .morale(-4), .usersPercent(-0.03)],
+                      result: "Dürüst ve hızlı yanıt fırtınayı dindirdi."),
+                .init("Sessiz kal, geçsin bekle", detail: "Risk: büyür", effects: [.reputation(-9), .usersPercent(-0.06)],
+                      result: "Sessizlik suçluluk gibi okundu; haber büyüdü.")
+            ]),
+
+        DecisionCard("influencer-backfire", category: .press, speaker: "Pazarlama", icon: "💥",
+            prompt: "Anlaştığın bir influencer başka bir skandala karıştı ve markanla birlikte anılıyor. Kampanya yarıda.",
+            trigger: .minUsers(800),
+            choices: [
+                .init("Sözleşmeyi hemen bitir, duyur", detail: "−nakit, +itibar", effects: [.cash(-7_000), .reputation(5), .usersPercent(-0.02)],
+                      result: "Hızlı mesafe koydun; kriz sıçramadı."),
+                .init("Kampanyayı bitir ama sessizce", detail: "+nakit, itibar riski", effects: [.reputation(-4)],
+                      result: "Az konuştun; bazı kullanıcılar yine de bağ kurdu.")
+            ]),
+
+        DecisionCard("misinformation-wave", category: .press, speaker: "Topluluk Yöneticisi", icon: "📢",
+            prompt: "Ürün hakkında yanlış bir iddia viral oldu: \"Verilerinizi satıyorlar.\" Doğru değil ama yayılıyor.",
+            trigger: .minUsers(1_000),
+            choices: [
+                .init("Şeffaf rapor yayınla", detail: "−nakit, +güven", effects: [.cash(-3_000), .reputation(8), .morale(3)],
+                      result: "Açık veri politikası belgesiyle iddia çürüdü."),
+                .init("Avukatla tehdit et", detail: "Risk: Streisand etkisi", effects: [.reputation(-6), .usersPercent(-0.04)],
+                      result: "Susturma çabası ateşe körük oldu.")
+            ]),
+
+        // MARK: - Yatırımcı & Board
+
+        DecisionCard("board-pressure", category: .investor, speaker: "Yönetim Kurulu", icon: "🪑",
+            prompt: "Board, kârlılık için ekibin %20'sini çıkarmanı istiyor. Sen kültürü korumak istiyorsun.",
+            trigger: .minStage(3),
+            choices: [
+                .init("Hedefli, küçük küçülme yap", detail: "+nakit, −moral", effects: [.cashPercent(0.15), .headcount(dept: 4, delta: -1), .morale(-9), .reputation(-2)],
+                      result: "Zor bir gün; runway uzadı ama yaralar kaldı."),
+                .init("Direnci koru, alternatif sun", detail: "+moral, board gerilimi", effects: [.morale(8), .reputation(3), .cashPercent(-0.05)],
+                      result: "Gelir planıyla board'u ikna ettin — bu sefer.")
+            ]),
+
+        DecisionCard("strategic-investor", category: .investor, speaker: "Kurumsal Yatırımcı", icon: "🏦",
+            prompt: "Büyük bir kurum stratejik yatırım teklif ediyor: bol nakit ama rakiplerinle çalışmanı kısıtlayan maddeler içeriyor.",
+            once: true, trigger: .minStage(3),
+            choices: [
+                .init("Stratejik parayı al", detail: "+büyük nakit, −esneklik", effects: [.cash(800_000), .equity(-0.10), .reputation(8), .moraleTargetBonus(-1)],
+                      result: "Kasan doldu ama artık bazı kapılar kapalı."),
+                .init("Finansal yatırımcı ara", detail: "−hız, +özgürlük", effects: [.cash(400_000), .equity(-0.08), .morale(4)],
+                      result: "Daha az nakit ama hiçbir bağ yok.")
+            ]),
+
+        DecisionCard("secondary-sale", category: .investor, speaker: "Yatırımcın", icon: "💵",
+            prompt: "Yatırımcın, kişisel hisselerinin bir kısmını satıp nakit çekmen için secondary sunuyor: ev al, rahatla.",
+            once: true, trigger: .minStage(4),
+            choices: [
+                .init("Biraz hisse sat, güvene al", detail: "+kişisel nakit, −hisse, +rahatlık", effects: [.equity(-0.04), .cash(200_000), .morale(10), .reputation(-2)],
+                      result: "Cebine para girdi; kararların daha sakin."),
+                .init("Hepsini şirkette tut", detail: "+inanç sinyali", effects: [.morale(5), .reputation(6)],
+                      result: "\"Tek kuruş çıkarmıyorum\" dedin; board etkilendi.")
+            ]),
+
+        // MARK: - Pazar & Makro
+
+        DecisionCard("market-downturn", category: .crisis, speaker: "Makro Ekonomi", icon: "🌪️",
+            prompt: "Piyasa çöküyor. Yatırım musluğu kurudu, müşteriler bütçe kesiyor. Kış geliyor.",
+            once: true, trigger: .minStage(3),
+            choices: [
+                .init("Default alive moduna geç", detail: "−büyüme, +runway", effects: [.cashPercent(0.1), .usersPercent(-0.05), .morale(-3), .reputation(4)],
+                      result: "Harcamayı kıstın; fırtınayı atlatacak yakıtın var."),
+                .init("Karşı-döngü büyü, pay kap", detail: "+kullanıcı, −nakit, risk", effects: [.usersPercent(0.2), .cashPercent(-0.2), .reputation(6)],
+                      result: "Herkes saklanırken sen saldırdın — yüksek bahis.")
+            ]),
+
+        DecisionCard("copycat-clone", category: .market, speaker: "Pazar İstihbaratı", icon: "👯",
+            prompt: "İyi finanse edilmiş bir klon ürününü birebir kopyaladı ve agresif pazarlama yapıyor.",
+            trigger: .minUsers(2_000),
+            choices: [
+                .init("Markaya ve topluluğa yaslan", detail: "+itibar, +moral", effects: [.reputation(9), .morale(6), .usersPercent(-0.03)],
+                      result: "Sadık topluluk \"orijinali biz\" diye sahip çıktı."),
+                .init("Özellik hızında yarış", detail: "+kullanıcı, −moral, −nakit", effects: [.usersPercent(0.08), .cash(-8_000), .morale(-5)],
+                      result: "Hız savaşına girdin; ekip yoruldu ama öndesin.")
+            ]),
+
+        DecisionCard("viral-moment", category: .opportunity, speaker: "Büyüme Ekibi", icon: "🎆",
+            prompt: "Bir haber döngüsü tam ürününün konusu hakkında; 24 saatlik bir viral pencere var. Hazır mısın?",
+            trigger: .minUsers(500),
+            choices: [
+                .init("Tüm gücü pazarlamaya ver", detail: "+büyük kullanıcı, −nakit", effects: [.usersPercent(0.45), .cash(-9_000), .reputation(7), .morale(-3)],
+                      result: "Anı yakaladın; trafik tavan yaptı."),
+                .init("Temkinli kal, hazır ol", detail: "Güvenli, daha az kazanç", effects: [.usersPercent(0.12), .reputation(3)],
+                      result: "Dalganın bir kısmını aldın; sunucular sağlam.")
+            ]),
+
+        DecisionCard("supply-dependency", category: .crisis, speaker: "Operasyon", icon: "🔗",
+            prompt: "Tek tedarikçin olan bir API sağlayıcısı fiyatları 3 katına çıkardı ve sözleşmeyi tek taraflı değiştirdi.",
+            trigger: .minStage(2),
+            choices: [
+                .init("Kendi çözümünü inşa et", detail: "−nakit, −hız, +bağımsızlık", effects: [.cash(-18_000), .morale(-4), .reputation(5), .usersPercent(-0.02)],
+                      result: "Acı bir çeyrek; ama artık kimseye bağımlı değilsin."),
+                .init("Yeni fiyatı yut", detail: "−nakit sürekli, +hız", effects: [.cashPercent(-0.12), .morale(1)],
+                      result: "Ödedin ve devam ettin; kılıç hâlâ tepende.")
+            ]),
+
     ]
 }
