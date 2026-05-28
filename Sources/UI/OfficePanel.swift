@@ -7,24 +7,35 @@ import SwiftUI
 /// - Kroki (FloorPlanView) hero — dikey ~60% yer kaplar (içerideki canvas yüksekliğini büyüttük).
 /// - Alt action strip: Sprint mini-card · Günlük mini-card · Mağaza primary CTA.
 ///   Halka/glow chip YOK — sade pill kartlar şeridi.
+/// Ofis ekranı sub-tab'i: Kroki (default) veya Projeler.
+private enum OfficeSubTab: String, CaseIterable { case kroki, projeler
+    var title: String { self == .kroki ? "Kroki" : "Projeler" }
+    var icon: String { self == .kroki ? "square.grid.3x3.fill" : "shippingbox.fill" }
+}
+
 struct OfficePanel: View {
     @ObservedObject var model: GameModel
     var theme: Theme
     @State private var showShop = false
     @State private var expanded: GoalsStrip.Detail? = nil
+    @State private var subTab: OfficeSubTab = .kroki
 
     var body: some View {
         VStack(spacing: Space.s3) {
-            if model.canRaise, let next = model.nextStage {
-                raiseStrip(next)
+            // Sleek segment switcher — Kroki | Projeler
+            segment
+
+            if subTab == .kroki {
+                if model.canRaise, let next = model.nextStage {
+                    raiseStrip(next)
+                }
+                FloorPlanView(model: model, theme: theme)
+                    .frame(maxHeight: .infinity)
+                actionStrip
+            } else {
+                ProjectsPanel(model: model, theme: theme)
+                    .frame(maxHeight: .infinity)
             }
-
-            // Hero: kroki sahnesi (büyük).
-            FloorPlanView(model: model, theme: theme)
-                .frame(maxHeight: .infinity)
-
-            // Alt action strip — Sprint · Günlük · Mağaza
-            actionStrip
         }
         .padding(.vertical, Space.s2)
         .sheet(isPresented: $showShop) {
@@ -34,6 +45,33 @@ struct OfficePanel: View {
             GoalDetailSheet(model: model, theme: theme, detail: which)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+    }
+
+    // MARK: - Sleek segment switcher (Kroki | Projeler)
+
+    /// Üst sleek seçici — iki kapsül buton, seçili olan accent dolgulu.
+    /// Ofis ekranını alt-segmentlere böler (kroki ve proje portföyü tek tab içinde).
+    private var segment: some View {
+        HStack(spacing: 6) {
+            ForEach(OfficeSubTab.allCases, id: \.self) { t in
+                let selected = subTab == t
+                Button {
+                    Haptics.selection(); withAnimation(Motion.snappy) { subTab = t }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: t.icon)
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(t.title)
+                            .font(.appText(12, selected ? .bold : .medium))
+                    }
+                    .foregroundStyle(selected ? .white : theme.subtle)
+                    .padding(.horizontal, Space.s3).padding(.vertical, 6)
+                    .background(selected ? theme.accent : theme.surfaceHigh, in: Capsule())
+                }
+                .buttonStyle(.pressable)
+            }
+            Spacer(minLength: 0)
         }
     }
 

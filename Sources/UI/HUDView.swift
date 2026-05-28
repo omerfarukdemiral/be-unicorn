@@ -75,8 +75,10 @@ struct HUDView: View {
     private var topRow: some View {
         HStack(alignment: .center, spacing: Space.s3) {
             leftGroup
+                .layoutPriority(1)
             Spacer(minLength: Space.s2)
             rightGroup
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 

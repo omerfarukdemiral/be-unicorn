@@ -14,6 +14,10 @@ struct GameState: Codable {
     var profile: CompanyProfile = CompanyProfile()
     // Şirketin ürün portföyü (projelerle büyüme mekaniği)
     var projects: [ProjectState] = []
+    // Programlı senaryolar (anlatısal, geri-sayımlı hedefler — kaynak yönetimi hissi).
+    var scenarios: [ScenarioInstance] = []
+    /// En son senaryo spawn edildiği oyun-ayı (spawn aralığını izlemek için).
+    var scenarioLastSpawnMonth: Double = 0
 
     // Ekip (departman jeneratörleri — sayaç) + bireysel üyeler (kimlik katmanı).
     // `headcount` ekonomi formülleri için tek doğruluk kaynağıdır; `members` üstüne
@@ -193,6 +197,16 @@ struct GameState: Codable {
             var fixed = p
             fixed.devProgress = min(1, max(0, fixed.devProgress))
             if fixed.devProgress >= 1 { fixed.isLive = true }
+            return fixed
+        }
+
+        // Senaryolar: geçersiz kind'ı at; settled olmayanların deadline'ı geçmişte ise
+        // (eski kayıt / saat manipülasyonu) güvenli şekilde "şimdiden hemen sonra" yapıp
+        // GameModel'in normal evaluate'una bırak.
+        scenarios = scenarios.compactMap { s in
+            guard ScenarioKind(rawValue: s.kind) != nil else { return nil }
+            var fixed = s
+            fixed.goalTargetValue = max(0, fixed.goalTargetValue)
             return fixed
         }
 

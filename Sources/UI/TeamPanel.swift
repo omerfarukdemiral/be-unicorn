@@ -54,6 +54,8 @@ private struct DeptRow: View {
     @ObservedObject var model: GameModel
     var theme: Theme
     let dept: DepartmentDef
+    /// Aktif atama popover'ı için seçili üye (nil → kapalı).
+    @State private var assignTarget: TeamMember? = nil
 
     private var deptColor: Color { Color(hex: dept.colorHex) }
 
@@ -120,6 +122,15 @@ private struct DeptRow: View {
                 }
             }
         }
+        // Üye satırına basıldığında — proje atama popover'ı (iPhone'da popover olarak yapışır).
+        .popover(item: $assignTarget,
+                 attachmentAnchor: .point(.center),
+                 arrowEdge: .top) { m in
+            MemberAssignPopover(model: model, theme: theme, memberID: m.id) {
+                assignTarget = nil
+            }
+            .presentationCompactAdaptation(.popover)
+        }
     }
 
     /// Departmandaki üyelerin mini satırları: avatar (initial) + ad + skill yıldızları + proje rozeti.
@@ -146,41 +157,51 @@ private struct DeptRow: View {
     private func memberRow(_ m: TeamMember) -> some View {
         let projectName = m.assignedProjectID
             .flatMap { id in model.projects.first(where: { $0.id == id })?.name }
-        return HStack(spacing: Space.s2) {
-            // Avatar: deptColor zemin + initials
-            Text(m.initials)
-                .font(.appText(9, .heavy))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(deptColor, in: Circle())
-                .overlay(
-                    // Kurucu rozeti: küçük taç noktası
-                    Circle().stroke(Palette.gold, lineWidth: m.isFounder ? 1.5 : 0)
-                )
+        // Tüm satır tıklanabilir → atama popover'ı; kart-içi mini chip yerine satır eylem.
+        return Button {
+            Haptics.selection()
+            assignTarget = m
+        } label: {
+            HStack(spacing: Space.s2) {
+                Text(m.initials)
+                    .font(.appText(9, .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(deptColor, in: Circle())
+                    .overlay(Circle().stroke(Palette.gold, lineWidth: m.isFounder ? 1.5 : 0))
 
-            // Ad + ünvan / kıdem
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 4) {
-                    Text(m.fullName).font(.appText(11, .semibold)).foregroundStyle(theme.text)
-                        .lineLimit(1)
-                    if m.isFounder {
-                        Text("CEO").font(.system(size: 7, weight: .black)).foregroundStyle(Palette.gold)
-                            .padding(.horizontal, 3).padding(.vertical, 1)
-                            .background(Palette.gold.opacity(0.18), in: Capsule())
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 4) {
+                        Text(m.fullName).font(.appText(11, .semibold)).foregroundStyle(theme.text)
+                            .lineLimit(1)
+                        if m.isFounder {
+                            Text("CEO").font(.system(size: 7, weight: .black)).foregroundStyle(Palette.gold)
+                                .padding(.horizontal, 3).padding(.vertical, 1)
+                                .background(Palette.gold.opacity(0.18), in: Capsule())
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        Text(m.skillStars).font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(Palette.gold)
+                        // Proje rozeti — atanmamışsa "Atanmamış" göster (tıkla → ata).
+                        if let pname = projectName {
+                            Text("· \(pname)").font(.appText(9, .medium))
+                                .foregroundStyle(theme.accent).lineLimit(1)
+                        } else {
+                            Text("· Atanmamış").font(.appText(9, .medium))
+                                .foregroundStyle(theme.textQuaternary)
+                        }
                     }
                 }
-                HStack(spacing: 4) {
-                    Text(m.skillStars).font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(Palette.gold)
-                    if let pname = projectName {
-                        Text("· \(pname)").font(.appText(9, .medium))
-                            .foregroundStyle(theme.subtle).lineLimit(1)
-                    }
-                }
+                Spacer(minLength: 0)
+                // Atama göstergesi — tıklanabilir olduğu görsel ipucu.
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(theme.subtle)
             }
-            Spacer(minLength: 0)
+            .padding(.horizontal, 4).padding(.vertical, 3)
         }
-        .padding(.horizontal, 4).padding(.vertical, 3)
+        .buttonStyle(.pressable)
     }
 
     /// Departman çıktı oranını dolu bar olarak gösterir (referans olarak headcount*2 hedef).

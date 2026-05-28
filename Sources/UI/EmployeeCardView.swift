@@ -9,6 +9,8 @@ struct EmployeeCardView: View {
     var theme: Theme
     let deptIndex: Int
     @State private var appeared = false
+    /// Aktif atama popover'ı için seçili üye (nil → kapalı).
+    @State private var assignTarget: TeamMember? = nil
 
     private var dept: DepartmentDef { Balance.departments[deptIndex] }
     private var tint: Color { Color(hex: dept.colorHex) }
@@ -86,6 +88,15 @@ struct EmployeeCardView: View {
             .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
             .shadow(color: .black.opacity(0.35), radius: 18, y: 6)
         }
+        // Üyeden proje atama popover'ı — modal içinden de erişilebilir.
+        .popover(item: $assignTarget,
+                 attachmentAnchor: .point(.center),
+                 arrowEdge: .top) { m in
+            MemberAssignPopover(model: model, theme: theme, memberID: m.id) {
+                assignTarget = nil
+            }
+            .presentationCompactAdaptation(.popover)
+        }
     }
 
     /// Tek bir üye satırı: avatar, ad, skill, proje, kıdem + fire (kurucu hariç).
@@ -117,11 +128,22 @@ struct EmployeeCardView: View {
                         .foregroundStyle(theme.subtle)
                     if let pname = projectName {
                         Text("· \(pname)").font(.appText(9, .medium))
-                            .foregroundStyle(theme.subtle).lineLimit(1)
+                            .foregroundStyle(theme.accent).lineLimit(1)
                     }
                 }
             }
             Spacer(minLength: 0)
+            // Atama: küçük "yer değiştir" düğmesi — proje atama popover'ını açar.
+            Button {
+                Haptics.selection(); assignTarget = m
+            } label: {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(theme.accent)
+                    .frame(width: 26, height: 26)
+                    .background(theme.accent.opacity(0.12), in: Circle())
+            }
+            .buttonStyle(.pressable)
             // Fire: kurucu HARİÇ; her satırın kendi mini-trash butonu.
             if !m.isFounder {
                 Button {

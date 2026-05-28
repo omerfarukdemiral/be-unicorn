@@ -1,11 +1,49 @@
 import SwiftUI
 
+/// İstatistik ekranı sub-tab'i: İstatistik (default) veya Yol Haritası.
+private enum StatsSubTab: String, CaseIterable { case stats, road
+    var title: String { self == .stats ? "İstatistik" : "Yol Haritası" }
+    var icon: String { self == .stats ? "chart.bar.fill" : "map.fill" }
+}
+
 /// İstatistik ekranı: temel metrikler + basit nakit/kullanıcı grafiği.
 struct StatsPanel: View {
     @ObservedObject var model: GameModel
     var theme: Theme
+    @State private var subTab: StatsSubTab = .stats
 
     var body: some View {
+        VStack(spacing: Space.s2) {
+            // Sleek segment — İstatistik | Yol Haritası (capsule-li, OfficePanel ile aynı dil).
+            HStack(spacing: 6) {
+                ForEach(StatsSubTab.allCases, id: \.self) { t in
+                    let selected = subTab == t
+                    Button {
+                        Haptics.selection(); withAnimation(Motion.snappy) { subTab = t }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: t.icon).font(.system(size: 11, weight: .semibold))
+                            Text(t.title).font(.appText(12, selected ? .bold : .medium))
+                        }
+                        .foregroundStyle(selected ? .white : theme.subtle)
+                        .padding(.horizontal, Space.s3).padding(.vertical, 6)
+                        .background(selected ? theme.accent : theme.surfaceHigh, in: Capsule())
+                    }
+                    .buttonStyle(.pressable)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, Space.s2)
+
+            if subTab == .stats {
+                statsScroll
+            } else {
+                RoadmapPanel(model: model, theme: theme)
+            }
+        }
+    }
+
+    private var statsScroll: some View {
         ScrollView {
             VStack(spacing: Space.s3) {
                 PanelCard(theme: theme) {

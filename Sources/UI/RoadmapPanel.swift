@@ -11,6 +11,10 @@ struct RoadmapPanel: View {
                 // Şirket kimliği — kuruluşta girilen CEO + şirket + sektör + portföy.
                 CompanyHeaderCard(model: model, theme: theme)
 
+                // Programlı senaryolar — önümüzdeki olaylar (Demo Day, basın, müşteri pilotu).
+                // Aktif senaryo yoksa kart kendi kendini gizler.
+                ScenariosCard(model: model, theme: theme)
+
                 PanelCard(theme: theme) {
                     VStack(alignment: .leading, spacing: Space.s3) {
                         HStack(alignment: .top) {

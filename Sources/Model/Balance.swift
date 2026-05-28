@@ -218,14 +218,23 @@ enum Balance {
     static let dailyLeagueCap: Double = 6
 
     // Kullanıcı büyüme & gelir
-    static let baseArpu: Double = 3.8            // kullanıcı başına aylık $ (taban) — MRR/valuation motorunu güçlendirir
+    static let baseArpu: Double = 3.8            // kullanıcı başına aylık $ (evre 0 tabanı)
+    /// ARPU evreyle büyür — fiyatlandırma gücü, upsell, kurumsal kontratlar (gerçek SaaS dinamiği).
+    /// Stage 5 (Series C) → 1.15^5 ≈ 2.01× → $7.64. Sabit ARPU mantıksızdı.
+    static let arpuStageScaling: Double = 1.15
+    /// Bir evredeki ARPU çarpanı (baseArpu × bu).
+    static func arpuMultiplier(forStage stage: Int) -> Double {
+        pow(arpuStageScaling, Double(stage))
+    }
     static let baseChurn: Double = 0.05          // aylık churn oranı (taban)
     static let viralFactor: Double = 0.045       // kullanıcı başına organik büyüme katkısı (geç-oyun ivmesi)
 
     // Moral
     static let startMorale: Double = 72
     static let baseMoraleTarget: Double = 60
-    static let moraleAdjustRate: Double = 0.08   // /sn yaklaşım hızı
+    static let moraleAdjustRate: Double = 0.05   // /sn yaklaşım hızı
+                                                 // Önceki 0.08'de moral ~12sn'de hedefine kavuşurdu;
+                                                 // 0.05 ile ~20sn → moral değişimleri daha iz bırakıcı.
     static let quitMoraleThreshold: Double = 28
     static let unpaidMoralePenalty: Double = 40  // maaş ödenemezse hedefe ek baskı
 
@@ -242,8 +251,10 @@ enum Balance {
     static let offlineEfficiency: Double = 0.5
 
     // Karar olayları
-    static let decisionMinInterval: Double = 99999  // sn — ekran görüntüsü için geçici olarak kapatıldı
-    static let decisionMaxInterval: Double = 99999
+    // Aralık: bir kart kapandıktan ~18-30 sn sonra yenisi gelir (oyun-zamanı; hızla ölçeklenir).
+    // 1× hızda yaklaşık her 18-30 saniye, 2× hızda 9-15 saniye gibi tempolu.
+    static let decisionMinInterval: Double = 18
+    static let decisionMaxInterval: Double = 30
 
     // MARK: Departmanlar
     static let departments: [DepartmentDef] = [
@@ -269,7 +280,7 @@ enum Balance {
               detail: "Kullanıcı büyümesi hızlanır.", baseCost: 12_000, costGrowth: 4.5, maxLevel: 5,
               effect: .growthMult(0.15), unlockStage: 1),
         .init(id: 2, name: "Premium Paket", icon: "💎",
-              detail: "Kullanıcı başına gelir (ARPU) artar.", baseCost: 18_000, costGrowth: 5.0, maxLevel: 5,
+              detail: "Kullanıcı başına gelir (ARPU) artar.", baseCost: 18_000, costGrowth: 4.0, maxLevel: 5,
               effect: .arpuMult(0.18), unlockStage: 1),
         .init(id: 3, name: "Müşteri Başarısı", icon: "🎧",
               detail: "Churn (kullanıcı kaybı) azalır.", baseCost: 15_000, costGrowth: 4.5, maxLevel: 5,
@@ -278,13 +289,13 @@ enum Balance {
               detail: "Takım morali yükselir.", baseCost: 10_000, costGrowth: 3.5, maxLevel: 5,
               effect: .moraleTarget(6.0), unlockStage: 0),
         .init(id: 5, name: "Uzaktan Çalışma", icon: "🏠",
-              detail: "Maaş maliyetleri düşer.", baseCost: 22_000, costGrowth: 5.0, maxLevel: 4,
+              detail: "Maaş maliyetleri düşer.", baseCost: 22_000, costGrowth: 4.0, maxLevel: 4,
               effect: .salaryReduce(0.06), unlockStage: 2),
         .init(id: 6, name: "Sunucu Optimizasyonu", icon: "🗄️",
               detail: "Bulut & sunucu giderleri düşer.", baseCost: 14_000, costGrowth: 4.2, maxLevel: 5,
               effect: .infraCostReduce(0.15), unlockStage: 1),
         .init(id: 7, name: "Hibrit Ofis", icon: "🏢",
-              detail: "Ofis kirası giderleri düşer.", baseCost: 20_000, costGrowth: 4.5, maxLevel: 4,
+              detail: "Ofis kirası giderleri düşer.", baseCost: 20_000, costGrowth: 4.0, maxLevel: 4,
               effect: .rentCostReduce(0.12), unlockStage: 2),
     ]
 
@@ -426,7 +437,8 @@ enum Balance {
 
     // MARK: Pazarlama / kullanıcı edinme (gerçek-hayat SaaS metrikleri)
     static let baseCAC: Double = 7.0          // taban müşteri edinme maliyeti ($/kullanıcı, evre 0)
-    static let cacStageScaling: Double = 1.25 // CAC evreyle artar (kanallar doyar, rekabet artar)
+    static let cacStageScaling: Double = 1.30 // CAC evreyle artar (kanallar doyar, rekabet artar)
+                                              // Stage 5 → $7 × 3.71 ≈ $26 (gerçek SaaS Series C: $50-300 aralığı).
     static let marketingAbsorption: Double = 5_000 // 1 birim pazarlama-gücü bu kadar reklam harcamasını verimli yutar
     static let adBudgetStepBase: Double = 500 // bütçe ayar adımı tabanı (evreyle ölçeklenir)
 
@@ -474,4 +486,19 @@ enum Balance {
               growthBonus: 0.08, arpuBonus: 0.07, reputationBonus: 1, buildCost: 18_000, buildMonths: 2.5),
     ]
     static func projectCategory(_ id: Int) -> ProjectCategoryDef? { projectCategories.first { $0.id == id } }
+
+    // MARK: Programlı senaryolar (anlatısal, ay-mertebesinde hedefler)
+    /// Aynı anda en fazla bu kadar aktif senaryo (oyuncu odağı bölünmesin).
+    static let maxActiveScenarios: Int = 3
+    /// Yeni senaryo eklenme aralığı (oyun-ayı). Birden çok senaryonun üst üste binmesini
+    /// önler; çeyrek başına ~2 senaryo akar.
+    static let scenarioSpawnIntervalMonths: Double = 1.4
+    /// Yeni senaryonun deadline'a kadar olan süresi (oyun-ayı) — oyuncu hazırlanabilsin.
+    static let scenarioLeadMonths: Double = 2.0
+    /// Senaryo hedefinin evre tabanlı değerleme tabanı (mantıksız küçük olmasın).
+    static func scenarioValuationFloor(stage: Int) -> Double {
+        // Bir sonraki evre hedef değerlemesinin yarısı (yoksa stage 0 tabanı).
+        let next = min(stage + 1, stageCount - 1)
+        return stages[next].valuationTarget * 0.5
+    }
 }

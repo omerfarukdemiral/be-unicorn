@@ -1,28 +1,25 @@
 import SwiftUI
 
+/// 5 birincil sekme — alt tab bar. Projeler Ofis'in alt-segmentinde,
+/// Yol Haritası İstatistik'in alt-segmentinde, Defter HUD'dan açılır.
 enum GameTab: CaseIterable {
-    case office, team, projects, growth, modules, roadmap, stats
+    case office, team, growth, modules, stats
     var title: String {
         switch self {
-        case .office:   return "Ofis"
-        case .team:     return "Ekip"
-        case .projects: return "Projeler"
-        case .growth:   return "Büyüme"
-        case .modules:  return "Modüller"
-        case .roadmap:  return "Yol"
-        case .stats:    return "İstatistik"
+        case .office:  return "Ofis"
+        case .team:    return "Ekip"
+        case .growth:  return "Büyüme"
+        case .modules: return "Modüller"
+        case .stats:   return "İstatistik"
         }
     }
-    /// SF Symbol adını döndürür.
     var symbolName: String {
         switch self {
-        case .office:   return Icons.Tab.office
-        case .team:     return Icons.Tab.team
-        case .projects: return Icons.Tab.projects
-        case .growth:   return Icons.Tab.growth
-        case .modules:  return Icons.Tab.modules
-        case .roadmap:  return Icons.Tab.roadmap
-        case .stats:    return Icons.Tab.stats
+        case .office:  return Icons.Tab.office
+        case .team:    return Icons.Tab.team
+        case .growth:  return Icons.Tab.growth
+        case .modules: return Icons.Tab.modules
+        case .stats:   return Icons.Tab.stats
         }
     }
 }
@@ -34,13 +31,11 @@ struct ContentView: View {
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "--start-tab"), i + 1 < args.count {
             switch args[i + 1] {
-            case "team":     return .team
-            case "projects": return .projects
-            case "growth":   return .growth
-            case "modules":  return .modules
-            case "roadmap":  return .roadmap
-            case "stats":    return .stats
-            default:         return .office
+            case "team":    return .team
+            case "growth":  return .growth
+            case "modules": return .modules
+            case "stats":   return .stats
+            default:        return .office
             }
         }
         return .office
@@ -59,13 +54,6 @@ struct ContentView: View {
         let token: Int
     }
 
-    /// Sağ kenarda yüzen rail (tek küme) için panellerin rezerve edeceği yatay padding.
-    /// Rail genişliği ~52pt + dış s2+ → 70pt güvenli.
-    private static let railReserve: CGFloat = 70
-
-    /// Tüm sekmeler tek rail içinde — sıra: ana döngü + meta.
-    private static let railTabs: [GameTab] =
-        [.office, .team, .projects, .growth, .modules, .roadmap, .stats]
 
     init() {
         _model = StateObject(wrappedValue: GameModel())
@@ -93,17 +81,12 @@ struct ContentView: View {
                         switch tab {
                         case .office:   OfficePanel(model: model, theme: theme)
                         case .team:     TeamPanel(model: model, theme: theme)
-                        case .projects: ProjectsPanel(model: model, theme: theme)
                         case .growth:   GrowthPanel(model: model, theme: theme)
                         case .modules:  ModulesPanel(model: model, theme: theme)
-                        case .roadmap:  RoadmapPanel(model: model, theme: theme)
                         case .stats:    StatsPanel(model: model, theme: theme)
                         }
                     }
-                    // Sağdaki rail için içerik nefes alsın (yalnız sağdan).
-                    .environment(\.sideMenuTrailing, Self.railReserve)
-                    .padding(.leading, Space.s3)
-                    .padding(.trailing, Self.railReserve)
+                    .padding(.horizontal, Space.s3)
                     .id(tab)
                     .transition(.opacity.combined(with: .offset(y: 6)))
                     .scaleEffect(introAppeared ? 1 : 0.96)
@@ -115,26 +98,34 @@ struct ContentView: View {
                         toastView(tt)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .padding(.top, Space.s1)
-                            .padding(.trailing, Self.railReserve + Space.s2)
+                            .padding(.trailing, Space.s4)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            // SAĞ tek sleek rail — tüm sekmeler + Defter + ses.
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                SideRail(theme: theme,
-                         tab: $tab,
-                         tabs: Self.railTabs,
-                         onLessons: { lessonsOpen = true },
-                         soundEnabled: $soundEnabled)
+            // Defter — top-right floating chip (tek ikon, sleek hairline).
+            VStack {
+                HStack {
+                    Spacer()
+                    Button { Haptics.selection(); lessonsOpen = true } label: {
+                        Image(systemName: "book.closed.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(theme.accent)
+                            .frame(width: 36, height: 36)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().stroke(theme.hairline))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Defter")
+                }
+                Spacer()
             }
-            .padding(.trailing, Space.s2 + 2)
-            .padding(.vertical, Space.s2)
-            .offset(x: introAppeared ? 0 : 100)
+            .padding(.trailing, Space.s3)
+            .padding(.top, 52)   // safe-area + HUD'un üstünde sade köşe yerleşimi
             .opacity(introAppeared ? 1 : 0)
-            .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.18),
+            .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.18),
                        value: introAppeared)
 
             // HUD nakit yakınında yüzen ±tutar çipi.
@@ -146,16 +137,27 @@ struct ContentView: View {
 
             overlays
         }
+        // Alt sticky chunky tab bar — vertical mobil oyun standart düzeni.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            bottomTabBar
+                .offset(y: introAppeared ? 0 : 60)
+                .opacity(introAppeared ? 1 : 0)
+                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.18),
+                           value: introAppeared)
+        }
         .sheet(isPresented: $lessonsOpen) {
             LessonsPanel(theme: theme, onClose: { lessonsOpen = false })
                 .presentationBackground(.clear)
         }
         .onAppear {
-            guard !introAppeared else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { introAppeared = true }
-            // Test/QA: --open-lessons defter sheet'ini açılışta aç (otomatik screenshot için).
-            if ProcessInfo.processInfo.arguments.contains("--open-lessons") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { lessonsOpen = true }
+            let args = ProcessInfo.processInfo.arguments
+            if !introAppeared {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { introAppeared = true }
+                // Test/QA: --open-lessons defter sheet'ini açılışta aç (otomatik screenshot için).
+                if args.contains("--open-lessons") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { lessonsOpen = true }
+                }
+                // Not: --force-decision GameModel.init içinde de işlenir (model katmanına da).
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -219,6 +221,57 @@ struct ContentView: View {
         ))
     }
 
+    /// Alt chunky tab bar — 5 birincil sekme (Ofis/Ekip/Büyüme/Modüller/İstatistik).
+    /// Seçili: accent dolu pill + hafif derinlik gölgesi. Pasif: hairline, secondary metin.
+    private var bottomTabBar: some View {
+        HStack(spacing: Space.s1) {
+            ForEach(GameTab.allCases, id: \.self) { t in
+                tabPill(t)
+            }
+        }
+        .padding(.horizontal, Space.s2)
+        .padding(.top, Space.s2)
+        .padding(.bottom, Space.s1)
+        .background(.ultraThinMaterial)
+        .overlay(Rectangle().fill(theme.hairline).frame(height: 1), alignment: .top)
+    }
+
+    private func tabPill(_ t: GameTab) -> some View {
+        let selected = tab == t
+        return Button {
+            guard tab != t else { return }
+            Haptics.selection(); Feedback.select()
+            withAnimation(Motion.smooth) { tab = t }
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: t.symbolName)
+                    .font(.system(size: selected ? 19 : 17,
+                                  weight: selected ? .bold : .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .symbolEffect(.bounce, value: selected)
+                Text(t.title)
+                    .font(.appText(10, selected ? .bold : .medium))
+            }
+            .foregroundStyle(selected ? .white : Palette.textTertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Space.s2)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
+                        .fill(theme.accent.opacity(0.92))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
+                            .stroke(.white.opacity(0.18)))
+                        .shadow(color: theme.accent.opacity(0.25), radius: 5, y: 2)
+                } else {
+                    RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
+                        .stroke(theme.hairline)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t.title)
+    }
+
     @ViewBuilder private var overlays: some View {
         if !model.hasSeenOnboarding {
             OnboardingOverlay(model: model, theme: theme)
@@ -232,6 +285,8 @@ struct ContentView: View {
             FundingRoundView(model: model, theme: theme, stageIndex: s)
         } else if let finale = model.pendingSeasonFinale {
             SeasonFinaleView(model: model, theme: theme, finale: finale)
+        } else if let scenarioResult = model.pendingScenarioResult {
+            ScenarioResultView(model: model, theme: theme, result: scenarioResult)
         } else if let review = model.pendingCycleReview {
             CycleReviewView(model: model, theme: theme, review: review)
         } else if let sprint = model.pendingSprintClose {

@@ -16,6 +16,7 @@ final class GameModel: ObservableObject {
     @Published var pendingDailyClose: DailyClose? = nil      // günlük hedef kapanış kutlaması
     @Published var pendingSprintClose: SprintClose? = nil    // haftalık sprint kapanışı (zirve/sonuç)
     @Published var pendingSeasonFinale: SeasonFinale? = nil  // sezon finali kutlaması + kalıcı ödül
+    @Published var pendingScenarioResult: ScenarioResult? = nil  // senaryo deadline sonucu (başarı/başarısızlık overlay'i)
     @Published var pendingToast: String? = nil
     @Published var inspectedDept: Int? = nil   // ofiste çalışana tıklanınca açılan kart
     @Published var founderTip: String = NarrativeContent.tips.first ?? ""
@@ -53,6 +54,15 @@ final class GameModel: ObservableObject {
         // Şirket sağlık durum-makinesi: mevcut metriklerden ilk state'i tohumla
         // (önceki state olarak healthy — sahte geçiş tetiklenmesin).
         lastHealth = HealthSystem.evaluate(model: self, previous: .healthy)
+        // Test/QA: --force-decision launch arg'ı (veya FORCE_DECISION env var) ile
+        // model init sırasında kartı hemen tetikle (state-tetikli kart dağılımını gözlem için).
+        let env = ProcessInfo.processInfo.environment
+        if ProcessInfo.processInfo.arguments.contains("--force-decision")
+            || env["FORCE_DECISION"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                self?.forceDecisionIfAvailable()
+            }
+        }
         start()
     }
 
@@ -267,8 +277,13 @@ final class GameModel: ObservableObject {
         Balance.baseChurn * max(0.2, 1 - effects.churnReduce - opsPower * 0.01) * (1 + overload)
     }
 
+    /// Kullanıcı başına aylık gelir (taban × evre çarpanı × modül + proje katkıları × satış gücü).
+    /// Evre çarpanı: SaaS fiyatlandırma gücü/upsell modeller — Series C'de ARPU ~2× taban.
     var arpu: Double {
-        Balance.baseArpu * (1 + effects.arpuMult + projectArpuMult) * (1 + salesPower * 0.05)
+        Balance.baseArpu
+            * Balance.arpuMultiplier(forStage: state.stage)
+            * (1 + effects.arpuMult + projectArpuMult)
+            * (1 + salesPower * 0.05)
     }
 
     var mrr: Double { state.users * arpu }
@@ -999,6 +1014,109 @@ final class GameModel: ObservableObject {
         save()
     }
 
+    // MARK: - Programlı senaryolar (anlatısal, geri-sayımlı kaynak yönetimi)
+
+    var scenarios: [ScenarioInstance] { state.scenarios }
+    /// Aktif (sonuçlanmamış) senaryolar — UI listesi için.
+    var activeScenarios: [ScenarioInstance] { state.scenarios.filter { !$0.settled } }
+
+    /// Bir senaryo için şu anki metrik ilerlemesi (0..1) — UI bar için.
+    func progress(for scenario: ScenarioInstance) -> Double {
+        ScenarioSystem.progress(for: scenario.scenarioKind,
+                                target: scenario.goalTargetValue,
+                                snapshot: scenarioSnapshot)
+    }
+    /// Bir senaryonun şu anki ham metrik değeri (UI etiket için).
+    func currentMetricValue(for scenario: ScenarioInstance) -> Double {
+        ScenarioSystem.currentValue(for: scenario.scenarioKind, snapshot: scenarioSnapshot)
+    }
+    /// Bir senaryonun deadline'a kalan oyun-ayı (negatif ise geçmiş).
+    func monthsRemaining(for scenario: ScenarioInstance) -> Double {
+        scenario.deadlineMonth - state.months
+    }
+    /// Bir senaryonun deadline'a kalan gerçek saniye (HUD/sn göstergesi için).
+    func secondsRemaining(for scenario: ScenarioInstance) -> Double {
+        let m = max(0, monthsRemaining(for: scenario))
+        return m * Balance.secondsPerMonth / max(0.0001, speed)
+    }
+
+    /// Şu anki ekonomik snapshot — ScenarioSystem'in saf değerlendirmesi için DTO.
+    private var scenarioSnapshot: ScenarioSystem.Snapshot {
+        ScenarioSystem.Snapshot(valuation: valuation,
+                                reputation: state.reputation,
+                                users: state.users,
+                                mrr: mrr,
+                                morale: state.morale,
+                                liveProjects: liveProjectCount,
+                                valuationFloor: Balance.scenarioValuationFloor(stage: state.stage))
+    }
+
+    /// Aralık geçti + aktif sayısı tavanda değil + setup tamamlandı → yeni senaryo aç.
+    /// Modal/kutlama açıkken bekletir (overlay çakışması olmasın).
+    private func maybeSpawnScenario() {
+        guard state.profile.setupComplete else { return }
+        guard pendingScenarioResult == nil, pendingFundingStage == nil,
+              !pendingWin, !pendingBankruptcy else { return }
+        guard activeScenarios.count < Balance.maxActiveScenarios else { return }
+        let sinceLast = state.months - state.scenarioLastSpawnMonth
+        // İlk spawn için lastSpawnMonth=0 ise kuruluştan itibaren aralığa göre.
+        guard sinceLast >= Balance.scenarioSpawnIntervalMonths else { return }
+
+        let kind = ScenarioSystem.pickKind(stage: state.stage, active: activeScenarios)
+        let target = ScenarioSystem.targetValue(for: kind, snapshot: scenarioSnapshot)
+        let instance = ScenarioInstance(
+            kind: kind.rawValue,
+            startMonth: state.months,
+            deadlineMonth: state.months + Balance.scenarioLeadMonths,
+            goalTargetValue: target)
+        state.scenarios.append(instance)
+        state.scenarioLastSpawnMonth = state.months
+        pendingToast = "Yeni hedef: \(kind.displayName) — \(Int(Balance.scenarioLeadMonths)) ay sonra."
+        save()
+    }
+
+    /// Deadline geçen senaryoları değerlendir → ödül/ceza uygula → result overlay tetikle.
+    /// Aynı tick'te birden çok senaryo settle olabilir; ilki UI'a düşer, diğerleri sonraki tick'te.
+    private func maybeSettleScenarios() {
+        guard pendingScenarioResult == nil else { return }
+        guard let idx = state.scenarios.firstIndex(where: {
+            !$0.settled && state.months >= $0.deadlineMonth
+        }) else { return }
+
+        var s = state.scenarios[idx]
+        let success = ScenarioSystem.evaluate(s, snapshot: scenarioSnapshot)
+        let reward = ScenarioSystem.reward(for: s.scenarioKind, success: success,
+                                           snapshot: scenarioSnapshot)
+        // Ödül/ceza uygula (nakit emit dahil — HUD'da çip görünür).
+        if reward.cash != 0 {
+            state.cash += reward.cash
+            emitCashDelta(reward.cash)
+        }
+        if reward.reputation != 0 {
+            state.reputation = min(100, max(0, state.reputation + reward.reputation))
+        }
+        if reward.morale != 0 {
+            state.morale = min(100, max(0, state.morale + reward.morale))
+        }
+        if reward.usersPercent != 0 {
+            state.users = max(0, state.users * (1 + reward.usersPercent))
+        }
+        s.settled = true
+        s.succeeded = success
+        state.scenarios[idx] = s
+
+        pendingScenarioResult = ScenarioResult(scenario: s, success: success, reward: reward)
+        save()
+    }
+
+    /// Sonuç overlay'ini kapat + settled senaryoyu listeden temizle (kalıcı saklanmasın).
+    func dismissScenarioResult() {
+        guard let result = pendingScenarioResult else { return }
+        state.scenarios.removeAll { $0.id == result.scenario.id }
+        pendingScenarioResult = nil
+        save()
+    }
+
     // MARK: - Kararlar (event kartları)
 
     private func scheduleNextDecision() {
@@ -1195,6 +1313,8 @@ final class GameModel: ObservableObject {
         updateHealthState() // şirket sağlık durum-makinesi: state geçişlerini yakala (zincir izleme)
         maybeCloseQuarter()
         maybeCloseSprint()
+        maybeSpawnScenario()    // yeni programlı senaryo aç (aralık geçtiyse)
+        maybeSettleScenarios()  // deadline geçen senaryoları değerlendir + ödül/ceza
 
         // Günlük hedef: kullanıcı hedefi zamanla dolabilir → her tick kontrol.
         // Gerçek gün değişimi de burada yakalanır (ör. uzun açık oturum gece yarısını geçerse).
@@ -1426,6 +1546,14 @@ final class GameModel: ObservableObject {
 struct CashDeltaEvent: Identifiable, Equatable {
     let id: UUID = UUID()
     let amount: Double
+}
+
+/// Programlı senaryonun deadline'ında üretilen sonuç — overlay payload'u.
+/// `success`: oyuncu hedefe ulaştı mı; `reward`: uygulanan etki (UI özet için).
+struct ScenarioResult {
+    let scenario: ScenarioInstance
+    let success: Bool
+    let reward: ScenarioSystem.Reward
 }
 
 /// "Yokken neler oldu" raporu.

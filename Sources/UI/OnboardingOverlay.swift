@@ -4,7 +4,7 @@ import SwiftUI
 struct OnboardingOverlay: View {
     @ObservedObject var model: GameModel
     var theme: Theme
-    @State private var step = 0
+    @State private var step: Int = 0
 
     /// Adım başlığı ve açıklaması — her adım tek cümle + ikon.
     private let steps: [(String, String, String)] = [
@@ -64,6 +64,14 @@ struct OnboardingOverlay: View {
                 }
                 .buttonStyle(.pressable)
                 .padding(.horizontal, Space.s5).padding(.bottom, Space.s6)
+            }
+        }
+        .onAppear {
+            // Test/QA: --onboard-step N ile direkt o adıma atla (ekran görüntüsü için).
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "--onboard-step"), i + 1 < args.count,
+               let n = Int(args[i + 1]) {
+                step = max(0, min(steps.count - 1, n))
             }
         }
     }
