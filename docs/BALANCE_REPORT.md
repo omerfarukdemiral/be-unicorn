@@ -17,7 +17,9 @@ Sim, `Balance.swift`'ten sapmıştı; **birebir senkronlandı**:
 
 **Senkron sonrası sonuç (kararlar hariç temel eğri):** 4/4 arketip Unicorn'a varıyor, en hızlı 44d / en yavaş 52d, **oran 1.16x** (sağlıklı bant <2.0x) → çoklu-yol dengesi TAMAM ✅.
 
-**AÇIK BULGU (audit #17 — beklemede):** senkron sonrası geç-oyun **LTV:CAC 14–73** çıkıyor (sağlıklı ~3–5, harika ~10–15). `salesPower`/ARPU ve LTV üst-sınırsız → geç-oyun "çok kolay" ve "satışçı yığ" baskın mikro-strateji olabilir. Doygunluk/tavan uygulanmalı (kalan yol haritası).
+**#17 KAPANDI (2026-05-29):** salesPower→ARPU tavanlandı (salesArpuPerUnit=0.04, salesArpuCap=+%80) + LTV tavanı (arpu×40 ay). Sonuç: geç-oyun **LTV:CAC 14-73 → 2.5-4.3** (sağlıklı bant), 4/4 arketip Unicorn, oran 1.17x. GameModel + BalanceSim aynı commit'te değişti.
+
+**AÇIK BULGU (audit #17 — KAPANDI ✅):** senkron sonrası geç-oyun **LTV:CAC 14–73** çıkıyor (sağlıklı ~3–5, harika ~10–15). `salesPower`/ARPU ve LTV üst-sınırsız → geç-oyun "çok kolay" ve "satışçı yığ" baskın mikro-strateji olabilir. Doygunluk/tavan uygulanmalı (kalan yol haritası).
 
 ---
 

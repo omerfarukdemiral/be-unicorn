@@ -229,6 +229,11 @@ enum Balance {
     }
     static let baseChurn: Double = 0.05          // aylık churn oranı (taban)
     static let viralFactor: Double = 0.045       // kullanıcı başına organik büyüme katkısı (geç-oyun ivmesi)
+    // Satış gücü → ARPU katkısı: tavanlı (audit #17). Tavansızken geç-oyun LTV:CAC 14-73'e
+    // patlıyordu (sim doğruladı); satışçı yığma baskın mikro-strateji oluyordu.
+    static let salesArpuPerUnit: Double = 0.04   // satış-gücü birimi başına ARPU katkısı
+    static let salesArpuCap: Double = 0.80       // satış gücünün ARPU'ya TOPLAM katkı tavanı (+%80)
+    static let ltvMonthsCap: Double = 40         // LTV ≤ ARPU × bu (churn→0'da LTV patlamasını sınırla)
 
     // Moral
     static let startMorale: Double = 72

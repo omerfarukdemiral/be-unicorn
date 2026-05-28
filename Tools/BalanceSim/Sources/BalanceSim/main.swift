@@ -94,6 +94,10 @@ enum Balance {
     // rapor üst evrelerde gerçek MRR'ı ~%30-40 düşük gösteriyordu. Artık birebir.
     static let arpuStageScaling: Double = 1.15
     static func arpuMultiplier(forStage stage: Int) -> Double { pow(arpuStageScaling, Double(stage)) }
+    // Satış gücü ARPU tavanı + LTV tavanı (audit #17 — Balance.swift birebir).
+    static let salesArpuPerUnit: Double = 0.04
+    static let salesArpuCap: Double = 0.80
+    static let ltvMonthsCap: Double = 40
     static let baseChurn: Double = 0.05
     static let viralFactor: Double = 0.045
 
@@ -332,7 +336,8 @@ final class Sim {
     var arpu: Double {
         Balance.baseArpu
             * Balance.arpuMultiplier(forStage: stage)
-            * (1 + effects.arpuMult) * (1 + salesPower * 0.05)
+            * (1 + effects.arpuMult)
+            * (1 + min(Balance.salesArpuCap, salesPower * Balance.salesArpuPerUnit))
     }
 
     var mrr: Double { users * arpu }
@@ -365,7 +370,7 @@ final class Sim {
     var grossUserGrowthPerMonth: Double { organicUserGrowthPerMonth + paidUserGrowthPerMonth }
     var netUserGrowthPerMonth: Double { grossUserGrowthPerMonth - users * churnRate }
 
-    var ltv: Double { churnRate > 0 ? arpu / churnRate : arpu * 100 }
+    var ltv: Double { churnRate > 0 ? min(arpu / churnRate, arpu * Balance.ltvMonthsCap) : arpu * Balance.ltvMonthsCap }
     var ltvCacRatio: Double { currentCAC > 0 ? ltv / currentCAC : 0 }
     var paybackMonths: Double { arpu > 0 ? currentCAC / arpu : .infinity }
 

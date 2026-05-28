@@ -285,7 +285,7 @@ final class GameModel: ObservableObject {
         Balance.baseArpu
             * Balance.arpuMultiplier(forStage: state.stage)
             * (1 + effects.arpuMult + projectArpuMult)
-            * (1 + salesPower * 0.05)
+            * (1 + min(Balance.salesArpuCap, salesPower * Balance.salesArpuPerUnit))
     }
 
     var mrr: Double { state.users * arpu }
@@ -323,7 +323,8 @@ final class GameModel: ObservableObject {
     var netUserGrowthPerMonth: Double { grossUserGrowthPerMonth - state.users * churnRate }
 
     /// Kullanıcı yaşam boyu değeri (aylık gelir / churn).
-    var ltv: Double { churnRate > 0 ? arpu / churnRate : arpu * 100 }
+    // LTV tavanı (audit #17): churn→0'da arpu/churn patlamasını arpu×ltvMonthsCap ile sınırla.
+    var ltv: Double { churnRate > 0 ? min(arpu / churnRate, arpu * Balance.ltvMonthsCap) : arpu * Balance.ltvMonthsCap }
     /// LTV / CAC oranı (sağlıklı > 3).
     var ltvCacRatio: Double { currentCAC > 0 ? ltv / currentCAC : 0 }
     /// Geri ödeme süresi (ay): CAC'i kullanıcıdan kaç ayda çıkarırsın.
