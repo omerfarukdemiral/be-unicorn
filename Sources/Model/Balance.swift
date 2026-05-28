@@ -292,10 +292,10 @@ enum Balance {
     static let stages: [StageDef] = [
         // Aurora Dark: zemin hep koyu (#0B0E14 ailesi, evreye çok hafif tint),
         // yüzey #161B26 ailesinden, accent rampası evre büyüdükçe güzelleşir.
-        .init(id: 0, name: "Garaj", title: "Hacker",
+        .init(id: 0, name: "Garaj", title: "CEO",
               valuationTarget: 0, raiseAmount: 0, equityGiven: 0,
               bgHex: "0B0E14", accentHex: "22D3EE", surfaceHex: "161B26", officeName: "Garaj"),
-        .init(id: 1, name: "Pre-seed", title: "Kurucu",
+        .init(id: 1, name: "Pre-seed", title: "CEO",
               valuationTarget: 500_000, raiseAmount: 150_000, equityGiven: 0.10,
               bgHex: "0B0F16", accentHex: "38BDF8", surfaceHex: "151C28", officeName: "Paylaşımlı Ofis"),
         .init(id: 2, name: "Seed", title: "CEO",
