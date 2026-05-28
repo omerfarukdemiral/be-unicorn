@@ -59,10 +59,15 @@ struct ContentView: View {
         let token: Int
     }
 
-    /// Sağ kenardaki menü kolonu için ayrılan dikey içerik padding'i (yatay).
-    /// HUD + paneller bu kadar trailing padding'le kolonun altına girmez.
-    /// SideMenu genişliği 60pt + dış margin 8pt + içerik nefes 12pt = 80pt rezerv.
-    private static let sideMenuReservedTrailing: CGFloat = 80
+    /// İki yandaki floating nav kümeleri için panellerin rezerve edeceği yatay padding.
+    /// Sol küme ~56pt + sağ küme ~56pt — paneller bu kadar yatay padding'le kümelerin
+    /// altına girmez (içerikler iki taraftan da nefes alır).
+    private static let floatingNavReserve: CGFloat = 68
+
+    /// Ana oyun döngüsü — SOL kümede.
+    private static let leftTabs: [GameTab] = [.office, .team, .growth, .projects]
+    /// Meta sekmeler — SAĞ kümede.
+    private static let rightTabs: [GameTab] = [.modules, .roadmap, .stats]
 
     init() {
         _model = StateObject(wrappedValue: GameModel())
@@ -74,17 +79,17 @@ struct ContentView: View {
         ZStack {
             theme.bg.ignoresSafeArea()
 
-            // Ana içerik: HUD + sekme paneli (alt tab bar YOK; sağ kenara yer ayrılır).
+            // Ana içerik: HUD (üst bubble bar) + sekme paneli (iki yan floating nav arasında).
             VStack(spacing: 0) {
-                HUDView(model: model, theme: theme)
-                    .padding(.leading, Space.s4)
-                    .padding(.trailing, Self.sideMenuReservedTrailing) // sağ menü altına girmesin
+                HUDView(model: model, theme: theme, soundEnabled: $soundEnabled)
+                    .padding(.horizontal, Space.s3)
                     .padding(.top, Space.s2)
-                    .padding(.bottom, Space.s1)
+                    .padding(.bottom, Space.s2)
                     // Açılış efekti: HUD yukarıdan aşağı yaylı kayar.
-                    .offset(y: introAppeared ? 0 : -36)
+                    .offset(y: introAppeared ? 0 : -40)
                     .opacity(introAppeared ? 1 : 0)
-                    .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.05), value: introAppeared)
+                    .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.05),
+                               value: introAppeared)
 
                 ZStack(alignment: .top) {
                     Group {
@@ -98,40 +103,54 @@ struct ContentView: View {
                         case .stats:    StatsPanel(model: model, theme: theme)
                         }
                     }
-                    // Panel sağdaki menüye girmesin: scroll içeriklerine trailing padding.
-                    .environment(\.sideMenuTrailing, Self.sideMenuReservedTrailing)
-                    .padding(.trailing, Self.sideMenuReservedTrailing)
+                    // Yan kümelere yer aç — paneller iki yandan da nefes alsın.
+                    .environment(\.sideMenuTrailing, Self.floatingNavReserve)
+                    .padding(.horizontal, Self.floatingNavReserve)
                     // Tab geçişi: yumuşak fade — sert kesme yerine.
                     .id(tab)
                     .transition(.opacity.combined(with: .offset(y: 6)))
                     // Açılış efekti: ana içerik hafif zoom-in + fade.
                     .scaleEffect(introAppeared ? 1 : 0.96)
                     .opacity(introAppeared ? 1 : 0)
-                    .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(0.1), value: introAppeared)
+                    .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(0.1),
+                               value: introAppeared)
 
-                    // Sağ üstte yüzen bildirim çipi — tıklanabilir, sekmeler arası kalıcı.
+                    // Sağ üstte yüzen bildirim çipi — HUD'un hemen altında, sağ kümeye girmez.
                     if let tt = topToast {
                         toastView(tt)
                             .frame(maxWidth: .infinity, alignment: .trailing)
-                            .padding(.top, Space.s2)
-                            .padding(.trailing, Self.sideMenuReservedTrailing + Space.s2)
+                            .padding(.top, Space.s1)
+                            .padding(.trailing, Self.floatingNavReserve + Space.s2)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            // Sağ kenar dikey ikon menüsü — floating side rail (oyun kültürü).
-            // Açılış efekti: menü sağdan kayar.
+            // SOL yüzen küme — ana oyun döngüsü (Office/Team/Growth/Projects).
+            HStack {
+                FloatingNavCluster(theme: theme, tab: $tab,
+                                   tabs: Self.leftTabs, side: .left)
+                    .padding(.leading, Space.s2)
+                Spacer()
+            }
+            .padding(.vertical, Space.s2)
+            .offset(x: introAppeared ? 0 : -100)
+            .opacity(introAppeared ? 1 : 0)
+            .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.18),
+                       value: introAppeared)
+
+            // SAĞ yüzen küme — meta (Modules/Roadmap/Stats).
             HStack {
                 Spacer()
-                SideMenu(model: model, tab: $tab, theme: theme, soundEnabled: $soundEnabled)
+                FloatingNavCluster(theme: theme, tab: $tab,
+                                   tabs: Self.rightTabs, side: .right)
                     .padding(.trailing, Space.s2)
             }
             .padding(.vertical, Space.s2)
-            .offset(x: introAppeared ? 0 : 90)
+            .offset(x: introAppeared ? 0 : 100)
             .opacity(introAppeared ? 1 : 0)
-            .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.15), value: introAppeared)
-            .allowsHitTesting(true)
+            .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.18),
+                       value: introAppeared)
 
             overlays
         }
@@ -235,12 +254,13 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Environment: sağ menü trailing reservation (paneller okuyabilir)
+// MARK: - Environment: floating nav yatay rezerv (paneller okuyabilir)
 private struct SideMenuTrailingKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
 extension EnvironmentValues {
-    /// Sağ kenar menü için panellerin bilmesi gereken trailing padding rezervi.
+    /// Floating nav kümeleri için panellerin bilmesi gereken yatay padding rezervi.
+    /// Eski isim korundu — paneller bu environment'tan ek iç padding hesaplıyor.
     var sideMenuTrailing: CGFloat {
         get { self[SideMenuTrailingKey.self] }
         set { self[SideMenuTrailingKey.self] = newValue }

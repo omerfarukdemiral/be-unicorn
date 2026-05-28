@@ -230,36 +230,16 @@ struct WinView: View {
     }
 }
 
-/// İflas ekranı.
+/// İflas ekranı — coaching scorecard'a (PostMortemView) delege eder.
+/// "Burada Ne Oldu? · Sonraki Deneme İçin Strateji": dramatik şok yerine bilge post-mortem.
+/// Restart akışı KORUNDU: PostMortemView içindeki "Yeni Deneme" butonu
+/// model.restartAfterBankruptcy()'i çağırır.
 struct BankruptcyView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
     var body: some View {
-        ZStack {
-            Color(hex: "12101F").opacity(0.92).ignoresSafeArea()
-            VStack(spacing: Space.s4) {
-                // İflas — sekizgen X, dramatik kırmızı
-                Image(systemName: Icons.Screen.bankruptcy)
-                    .font(.system(size: 72, weight: .bold))
-                    .foregroundStyle(Palette.danger)
-                Text("İFLAS")
-                    .font(.displayXL)
-                    .foregroundStyle(Palette.danger)
-                Text("Nakit tükendi, ekip dağıldı.\nAma her başarısızlık bir ders.")
-                    .font(.appText(14, .medium))
-                    .foregroundStyle(theme.text).multilineTextAlignment(.center)
-                Text("Kurucu Tecrübesi: \(Int(model.state.founderXP)) · sonraki şirket daha güçlü başlar")
-                    .font(.numberS)
-                    .foregroundStyle(Palette.gold).multilineTextAlignment(.center)
-                Button { Haptics.tap(); model.restartAfterBankruptcy() } label: {
-                    Text("Yeniden Kur").font(.bodyL)
-                        .modifier(AppButton.danger())
-                }
-                .buttonStyle(.pressable)
-            }
-            .padding(Space.s6).frame(maxWidth: 340).padding(.horizontal, Space.s5)
-        }
-        .onAppear { Haptics.error() }
+        PostMortemView(model: model, theme: theme)
+            .onAppear { Haptics.error() }   // iflas hissi — koçluk başlamadan önce tek darbe.
     }
 }
 

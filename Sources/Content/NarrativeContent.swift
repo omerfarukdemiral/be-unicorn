@@ -37,6 +37,16 @@ enum NarrativeContent {
         "Hızlı büyüme mimariyi test eder; ölçeklenmeyen kod en pahalı borçtur.",
         "İnfluencer'ın itibarı senin itibarındır; ortağını dikkatle seç.",
         "Çeşitli ekip daha iyi karar alır; tek tip oda kör nokta üretir.",
+        "Tek doğru yol yoktur — Bootstrap, VC-Roket, Niş Uzman, Platform Geniş; her arketip kazanır, sadece patikası farklı.",
+        "Default-alive: kimseye muhtaç olmadan hayatta kalabildiğin gün strateji seçeneklerinin sayısı artar.",
+        "Başarısızlık öğrenmektir; iyi post-mortem bir sonraki stratejine yatırımdır — özrü değil.",
+        "İki seçenek de duruma göre doğru olabilir; bağlamı oku, kuralı ezberleme.",
+        "Hayır demek bir ürün stratejisidir; her 'evet' yol haritana bir çapa atar.",
+        "Pivot başarısızlığın itirafı değil, verinin takibidir — ego susmadan veriyi okumak zor.",
+        "Geri ödeme zorunlu olmayan tek paraya bedava deme; kurucu zamanı her zaman bedellidir.",
+        "Concentration risk uyarısız vurur; tek müşteri, tek kanal, tek tedarikçi — üçü de görünmez tasmadır.",
+        "Cap table sağlığı, bir sonraki turun ön koşuludur; bugünkü %1, yarınki %5 fiyat çapasıdır.",
+        "Kahramanlık kültürü kısa vade satar, uzun vade burnout zinciri kurar — sistem kahramana ihtiyaç duyuyorsa sistem kırıktır.",
     ]
 
     static let onHire: [String] = [
@@ -51,6 +61,8 @@ enum NarrativeContent {
         "İşe alım kapandı; onboarding başladı. İlk hafta her şeyi belirler.",
         "Birini daha ikna ettin — vizyon satmak da bir yetenek.",
         "Ekip genişledi; artık iletişim de bir tasarım problemi.",
+        "Doğru hire, yanlış hire'ı geri çıkarmaktan ucuzdur — bar'ı koru.",
+        "İlk 20 kişide kültür donar; sonraki 200 onu çoğaltır ya da çürütür.",
     ]
 
     static let onMilestone: [String] = [
@@ -62,6 +74,8 @@ enum NarrativeContent {
         "Dün imkânsız görünen, bugün geride kaldı. Çıta yükseliyor.",
         "Bu eşik bir kanıt: yöntemin işe yarıyor. Ölçekle.",
         "Grafik yukarı kıvrıldı. Şimdi onu kıvrık tutma vakti.",
+        "Bu milestone bir kanıt değil bir veri noktası — strateji aynı stratejiyle ikinci kez de kazanırsa öğrenildi sayılır.",
+        "Aynı hedefe farklı patikalardan varılır; sıralamana değil rotana sahiplen.",
     ]
 
     static let onCrisisResolved: [String] = [
@@ -73,6 +87,9 @@ enum NarrativeContent {
         "Yangını söndürdünüz; şimdi neden çıktığını anlama zamanı.",
         "Krizden çıkan ekip, krizden önceki ekipten daha güçlüdür.",
         "Bir kurşunu daha savuşturdun. Soğukkanlılık kazandırdı.",
+        "İyi post-mortem suçlama aramaz; sistemin kör noktasını arar.",
+        "Krizi atlatmak başarı değil minimum şart; ders çıkarmak başarıdır.",
+        "Şu çeyrek hata yapma; gelecek çeyrek aynı hatayı yapma — fark öğrenmedir.",
     ]
 
     // MARK: Kuruluş — isim önerileri (kurucu + şirket + proje)
