@@ -19,7 +19,7 @@ Sim, `Balance.swift`'ten sapmıştı; **birebir senkronlandı**:
 
 **#17 KAPANDI (2026-05-29):** salesPower→ARPU tavanlandı (salesArpuPerUnit=0.04, salesArpuCap=+%80) + LTV tavanı (arpu×40 ay). Sonuç: geç-oyun **LTV:CAC 14-73 → 2.5-4.3** (sağlıklı bant), 4/4 arketip Unicorn, oran 1.17x. GameModel + BalanceSim aynı commit'te değişti.
 
-**AÇIK BULGU (audit #17 — KAPANDI ✅):** senkron sonrası geç-oyun **LTV:CAC 14–73** çıkıyor (sağlıklı ~3–5, harika ~10–15). `salesPower`/ARPU ve LTV üst-sınırsız → geç-oyun "çok kolay" ve "satışçı yığ" baskın mikro-strateji olabilir. Doygunluk/tavan uygulanmalı (kalan yol haritası).
+_(Tarihsel not: senkron ilk koşusunda LTV:CAC 14–73 çıkmıştı — `salesPower`/ARPU ve LTV üst-sınırsızdı. Yukarıdaki #17 tavanlarıyla giderildi.)_
 
 ---
 
