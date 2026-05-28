@@ -1206,7 +1206,8 @@ final class GameModel: ObservableObject {
     }
 
     /// Geliştirme aşamasındaki projeleri ilerlet; tamamlananları yayına al (kutlama).
-    private func advanceProjects(_ monthFraction: Double) {
+    /// `internal` görünürlük — @testable testler deterministik dev → live geçişini tetikleyebilsin.
+    func advanceProjects(_ monthFraction: Double) {
         guard state.projects.contains(where: { !$0.isLive }) else { return }
         let accel = projectBuildAccel
         for i in state.projects.indices where !state.projects[i].isLive {
