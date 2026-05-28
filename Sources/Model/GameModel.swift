@@ -103,12 +103,16 @@ final class GameModel: ObservableObject {
 
     /// 1× / 2× / 3× — oyuncunun ayarladığı gerçek-zaman tempo çarpanı.
     @Published var speed: Double = 1
+    /// Simülatörü duraklatma (zaman donar; tick economy/karar/moral işlemez).
+    @Published var isPaused: Bool = false
     static let speedOptions: [Double] = [1, 2, 3]
     func cycleSpeed() {
         let opts = Self.speedOptions
         let idx = opts.firstIndex(of: speed) ?? 0
         speed = opts[(idx + 1) % opts.count]
+        if isPaused { isPaused = false }   // hız değişimi otomatik devam ettirir
     }
+    func togglePause() { isPaused.toggle() }
 
     // MARK: - Erişimciler
 
@@ -220,7 +224,7 @@ final class GameModel: ObservableObject {
     }
 
     var arpu: Double {
-        Balance.baseArpu * (1 + effects.arpuMult) * (1 + salesPower * 0.05)
+        Balance.baseArpu * (1 + effects.arpuMult + projectArpuMult) * (1 + salesPower * 0.05)
     }
 
     var mrr: Double { state.users * arpu }
@@ -233,8 +237,9 @@ final class GameModel: ObservableObject {
     }
 
     /// Reklamsız, kelime-ağızdan + pazarlama ekibi + viral organik büyüme.
+    /// Yayındaki projeler büyümeye oransal katkı verir (portföy etkisi).
     var organicUserGrowthPerMonth: Double {
-        marketingPower * 30 * (1 + effects.growthMult) * (0.5 + state.reputation / 100)
+        marketingPower * 30 * (1 + effects.growthMult + projectGrowthMult) * (0.5 + state.reputation / 100)
             + state.users * Balance.viralFactor * (state.reputation / 50)
     }
 
@@ -339,6 +344,7 @@ final class GameModel: ObservableObject {
             + devPower * 15_000
             + state.reputation * 2_000
             + max(0, state.cash) * 0.5
+            + Double(liveProjectCount) * Balance.projectValuationEach   // portföy değeri
     }
 
     // MARK: - İşe alım / çıkarma
@@ -476,8 +482,10 @@ final class GameModel: ObservableObject {
         return min(100, b.score + dailyBonus + sprintBonus)
     }
 
-    /// Oyuncu ekran adı (leaderboard'da gösterilir) — şirket/funding evre adı.
-    var playerCompanyName: String { "Sen · \(currentStage.name)" }
+    /// Oyuncu ekran adı (leaderboard'da gösterilir) — kuruluşta girilen şirket adı.
+    var playerCompanyName: String {
+        state.profile.companyName.isEmpty ? "Sen · \(currentStage.name)" : state.profile.companyName
+    }
 
     /// Canlı standings: oyuncu + rakipler, çeyrek skoruna göre sıralı (her tick güncel).
     var liveStandings: [StandingEntry] {
@@ -985,12 +993,22 @@ final class GameModel: ObservableObject {
         let xp = state.founderXP
         let reached = state.stageReached
         let bankruptcies = state.bankruptcies
+        let profile = state.profile        // aynı kurucu yeniden kurar (kimlik korunur)
+        let firstProject = state.projects.first
         var fresh = GameState()
         fresh.founderXP = xp
         fresh.stageReached = reached
         fresh.bankruptcies = bankruptcies
         fresh.cash = Balance.startCash * (1 + xp * 0.1)   // tecrübe = daha iyi başlangıç
         fresh.hasSeenOnboarding = true
+        // Kimliği koru: kuruluşu tekrar istemeyiz; yeni şirket aynı kurucunun yeni denemesidir.
+        fresh.profile = profile
+        if profile.setupComplete {
+            let cat = firstProject?.category ?? 0
+            let name = firstProject?.name ?? (profile.companyName.isEmpty ? "MVP" : profile.companyName)
+            fresh.projects = [ProjectState(name: name, category: cat,
+                                           startMonth: 0, devProgress: 1, isLive: true)]
+        }
         state = fresh
         debtMonths = 0
         pendingBankruptcy = false
@@ -1017,12 +1035,15 @@ final class GameModel: ObservableObject {
         let realDt = now.timeIntervalSince(lastTick)
         lastTick = now
         guard realDt > 0 else { return }
+        // Duraklatıldıysa: zaman donar — economy/karar/moral/projeler ilerlemez.
+        if isPaused { return }
 
         // Oyun-zamanı dt = gerçek dt × hız çarpanı (zaman hızlandırma).
         let dt = realDt * speed
 
         let monthFraction = dt / Balance.secondsPerMonth
         advanceEconomy(monthFraction)
+        advanceProjects(monthFraction)   // geliştirilen projeler ilerler, biten yayına girer
         updateMorale(dt)
         maybeQuit(dt)
 
@@ -1068,8 +1089,8 @@ final class GameModel: ObservableObject {
         state.users = max(0, state.users + dUsers)
 
         // itibar yumuşakça tabana döner (olaylar/turlar yukarı iter)
-        // Estetik/lüks eşyalar tabanı kalıcı olarak yukarı çeker.
-        let repBaseline = min(100, 20 + itemReputationBonus)
+        // Estetik/lüks eşyalar + yayındaki projeler tabanı kalıcı olarak yukarı çeker.
+        let repBaseline = min(100, 20 + itemReputationBonus + projectReputationBonus)
         state.reputation += (repBaseline - state.reputation) * 0.002
         state.reputation = min(100, max(0, state.reputation))
     }
@@ -1096,6 +1117,110 @@ final class GameModel: ObservableObject {
     func completeOnboarding() {
         state.hasSeenOnboarding = true
         save()
+    }
+
+    // MARK: - Şirket kuruluşu (CEO + şirket + sektör + ilk proje)
+
+    var companySetupComplete: Bool { state.profile.setupComplete }
+    var companyName: String { state.profile.companyName }
+    var founderFullName: String { state.profile.founderFullName }
+    /// Kurucu ünvanı evreyle yükselir (Hacker → Kurucu → CEO ...).
+    var founderTitle: String { currentStage.title }
+    var sectorDef: CompanySectorDef { Balance.sector(state.profile.sector) ?? Balance.sectors[0] }
+
+    /// Kuruluşu tamamla: profili kaydet + ilk projeyi (yayında) oluştur.
+    /// İlk proje gün-1'den canlıdır (MVP yayında) — şirketin ilk ürünü.
+    func completeCompanySetup(firstName: String, lastName: String,
+                              company: String, sector: Int,
+                              firstProjectName: String, firstProjectCategory: Int) {
+        func clean(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+        state.profile.founderFirstName = clean(firstName)
+        state.profile.founderLastName = clean(lastName)
+        state.profile.companyName = clean(company)
+        state.profile.sector = min(max(0, sector), Balance.sectors.count - 1)
+        state.profile.setupComplete = true
+
+        let catIndex = min(max(0, firstProjectCategory), Balance.projectCategories.count - 1)
+        let projName = clean(firstProjectName).isEmpty ? clean(company) : clean(firstProjectName)
+        state.projects = [ProjectState(name: projName, category: catIndex,
+                                       startMonth: state.months, devProgress: 1, isLive: true)]
+        save()
+    }
+
+    // MARK: - Projeler (şirketin ürün portföyü — büyüme mekaniği)
+
+    var projects: [ProjectState] { state.projects }
+    var liveProjects: [ProjectState] { state.projects.filter { $0.isLive } }
+    var liveProjectCount: Int { liveProjects.count }
+    /// Portföy kapasitesi (evreyle büyür) ve doluluk.
+    var maxProjects: Int { Balance.maxProjects(stage: state.stage) }
+    var canStartNewProject: Bool { state.projects.count < maxProjects }
+
+    /// Yayındaki projelerin organik büyümeye toplam oransal katkısı.
+    private var projectGrowthMult: Double {
+        liveProjects.reduce(0) { $0 + (Balance.projectCategory($1.category)?.growthBonus ?? 0) }
+    }
+    /// Yayındaki projelerin ARPU'ya toplam oransal katkısı.
+    private var projectArpuMult: Double {
+        liveProjects.reduce(0) { $0 + (Balance.projectCategory($1.category)?.arpuBonus ?? 0) }
+    }
+    /// Yayındaki projelerin itibar tabanına toplam katkısı (puan).
+    private var projectReputationBonus: Double {
+        liveProjects.reduce(0) { $0 + (Balance.projectCategory($1.category)?.reputationBonus ?? 0) }
+    }
+
+    /// Bir kategorinin yeni proje başlatma maliyeti (evreyle ölçeklenir).
+    func projectStartCost(_ category: Int) -> Double {
+        (Balance.projectCategory(category)?.buildCost ?? 0) * Balance.salaryMultiplier(forStage: state.stage)
+    }
+    /// Bu kategoride yeni proje başlatılabilir mi (kapasite + nakit).
+    func canStartProject(_ category: Int) -> Bool {
+        canStartNewProject && state.cash >= projectStartCost(category)
+    }
+
+    /// Geliştirme hızı çarpanı: mühendislik gücü referansa göre projeleri hızlandırır.
+    private var projectBuildAccel: Double {
+        max(0.4, min(2.5, devPower / Balance.projectDevReference))
+    }
+
+    /// Geliştirme aşamasındaki projenin kalan süresi (gerçek saniye) — ETA göstergesi.
+    func projectETASeconds(_ project: ProjectState) -> Double {
+        guard !project.isLive, let cat = Balance.projectCategory(project.category) else { return 0 }
+        let remaining = max(0, 1 - project.devProgress)
+        let monthsLeft = remaining * max(0.5, cat.buildMonths) / max(0.0001, projectBuildAccel)
+        return monthsLeft * Balance.secondsPerMonth / max(0.0001, speed)
+    }
+
+    @discardableResult
+    func startProject(name: String, category: Int) -> Bool {
+        guard canStartProject(category) else { return false }
+        let catIndex = min(max(0, category), Balance.projectCategories.count - 1)
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let projName = cleanName.isEmpty ? "Proje \(state.projects.count + 1)" : cleanName
+        state.cash -= projectStartCost(catIndex)
+        state.projects.append(ProjectState(name: projName, category: catIndex,
+                                           startMonth: state.months, devProgress: 0, isLive: false))
+        state.morale = min(100, state.morale + Balance.projectStartMoraleBonus)
+        save()
+        return true
+    }
+
+    /// Geliştirme aşamasındaki projeleri ilerlet; tamamlananları yayına al (kutlama).
+    private func advanceProjects(_ monthFraction: Double) {
+        guard state.projects.contains(where: { !$0.isLive }) else { return }
+        let accel = projectBuildAccel
+        for i in state.projects.indices where !state.projects[i].isLive {
+            let cat = Balance.projectCategory(state.projects[i].category)
+            let months = max(0.5, cat?.buildMonths ?? 2)
+            state.projects[i].devProgress += monthFraction * accel / months
+            if state.projects[i].devProgress >= 1 {
+                state.projects[i].devProgress = 1
+                state.projects[i].isLive = true
+                state.morale = min(100, state.morale + Balance.projectLaunchMoraleBonus)
+                state.reputation = min(100, state.reputation + Balance.projectLaunchReputationBonus)
+                pendingToast = "\(state.projects[i].name) yayında! Büyümeye katkı sağlıyor."
+            }
+        }
     }
 
     // MARK: - Tema erişimcileri (Scene & UI okur)

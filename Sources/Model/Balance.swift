@@ -138,6 +138,33 @@ struct StageDef: Identifiable {
     let officeName: String       // ofis sahnesi etiketi
 }
 
+// MARK: - Şirket sektörü (kuruluşta seçilir — kurgu/lezzet + ilk proje önerisi)
+
+/// Bir sektör: şirketin faaliyet alanı. Ekonomiyi etkilemez; kimlik/anlatı içindir.
+struct CompanySectorDef: Identifiable {
+    let id: Int
+    let name: String
+    let icon: String        // SF Symbol
+    let tagline: String     // kısa açıklama
+    let colorHex: String
+}
+
+// MARK: - Proje kategorisi (şirketin ürün/projeleri — büyüme mekaniği)
+
+/// Bir proje kategorisi: şirketin geliştirebileceği ürün türü. Canlı (yayında) iken
+/// büyüme/ARPU/itibara oransal katkı verir. Geliştirme süresi + maliyeti farklıdır.
+struct ProjectCategoryDef: Identifiable {
+    let id: Int
+    let name: String
+    let icon: String            // SF Symbol
+    let detail: String
+    let growthBonus: Double     // organik büyümeye oransal katkı (live iken)
+    let arpuBonus: Double       // ARPU'ya oransal katkı (live iken)
+    let reputationBonus: Double // itibar tabanına puan (live iken)
+    let buildCost: Double       // evre 0 başlangıç (geliştirme) maliyeti — evreyle ölçeklenir
+    let buildMonths: Double     // referans dev gücünde kaç oyun-ayı sürer
+}
+
 // MARK: - Tüm sabitler tek kaynakta
 
 enum Balance {
@@ -402,4 +429,49 @@ enum Balance {
     static let cacStageScaling: Double = 1.25 // CAC evreyle artar (kanallar doyar, rekabet artar)
     static let marketingAbsorption: Double = 5_000 // 1 birim pazarlama-gücü bu kadar reklam harcamasını verimli yutar
     static let adBudgetStepBase: Double = 500 // bütçe ayar adımı tabanı (evreyle ölçeklenir)
+
+    // MARK: Sektörler (kuruluş — kurgu/lezzet)
+    static let sectors: [CompanySectorDef] = [
+        .init(id: 0, name: "Fintech",       icon: "creditcard.fill",                   tagline: "Para, ödeme ve bankacılık.",        colorHex: "4FD1A1"),
+        .init(id: 1, name: "Yapay Zeka",    icon: "brain.head.profile",                tagline: "Akıllı modeller ve otomasyon.",     colorHex: "C77DFF"),
+        .init(id: 2, name: "E-ticaret",     icon: "cart.fill",                         tagline: "Online satış ve pazar yeri.",       colorHex: "FF9F5A"),
+        .init(id: 3, name: "Oyun",          icon: "gamecontroller.fill",               tagline: "Mobil ve sosyal oyunlar.",          colorHex: "5B8DEF"),
+        .init(id: 4, name: "Sağlık Tek.",   icon: "cross.case.fill",                   tagline: "Dijital sağlık çözümleri.",         colorHex: "F0584F"),
+        .init(id: 5, name: "Eğitim Tek.",   icon: "graduationcap.fill",                tagline: "Online öğrenme platformları.",      colorHex: "FFD479"),
+        .init(id: 6, name: "Üretkenlik",    icon: "checklist",                         tagline: "İş ve ekip araçları (SaaS).",       colorHex: "2EE6C5"),
+        .init(id: 7, name: "Yeşil Tek.",    icon: "leaf.fill",                         tagline: "Sürdürülebilirlik ve enerji.",      colorHex: "3FCF8E"),
+    ]
+    static func sector(_ id: Int) -> CompanySectorDef? { sectors.first { $0.id == id } }
+
+    // MARK: Projeler (şirketin ürün portföyü — büyüme mekaniği)
+    /// Referans mühendislik gücü: bu seviyede projeler "normal" hızda yayına girer
+    /// (devPower bunun üstündeyse hızlanır, altındaysa yavaşlar).
+    static let projectDevReference: Double = 2.5
+    /// Yayındaki bir projenin değerlemeye sabit katkısı (portföy değeri).
+    static let projectValuationEach: Double = 30_000
+    /// Yeni proje başlatınca küçük moral dokunuşu (yeni hedef hevesi).
+    static let projectStartMoraleBonus: Double = 3
+    /// Proje yayına girince moral + itibar dokunuşu (kutlama — nakit YOK).
+    static let projectLaunchMoraleBonus: Double = 6
+    static let projectLaunchReputationBonus: Double = 4
+
+    /// Aynı anda taşınabilen toplam proje sayısı (portföy kapasitesi) — evreyle büyür.
+    /// Şirket büyüdükçe daha çok projeyi yönetebilir (büyümeyi evreye bağlar).
+    static func maxProjects(stage: Int) -> Int { 2 + stage }
+
+    static let projectCategories: [ProjectCategoryDef] = [
+        .init(id: 0, name: "Mobil Uygulama", icon: "iphone",            detail: "Hızlı kullanıcı büyümesi; düşük gelir.",
+              growthBonus: 0.10, arpuBonus: 0.04, reputationBonus: 1, buildCost: 8_000,  buildMonths: 1.5),
+        .init(id: 1, name: "Web Platformu",  icon: "globe",             detail: "Dengeli; kullanıcı başına gelir güçlü.",
+              growthBonus: 0.05, arpuBonus: 0.10, reputationBonus: 1, buildCost: 12_000, buildMonths: 2.0),
+        .init(id: 2, name: "Yapay Zeka",     icon: "sparkles",          detail: "Yüksek itibar + gelir; pahalı ve yavaş.",
+              growthBonus: 0.06, arpuBonus: 0.09, reputationBonus: 3, buildCost: 25_000, buildMonths: 3.0),
+        .init(id: 3, name: "API & Altyapı",  icon: "network",           detail: "Geliştirici geliri; sessiz büyüme.",
+              growthBonus: 0.03, arpuBonus: 0.08, reputationBonus: 2, buildCost: 15_000, buildMonths: 2.5),
+        .init(id: 4, name: "Oyun",           icon: "gamecontroller.fill", detail: "Patlayıcı büyüme; düşük ARPU.",
+              growthBonus: 0.13, arpuBonus: 0.03, reputationBonus: 2, buildCost: 10_000, buildMonths: 2.0),
+        .init(id: 5, name: "Pazar Yeri",     icon: "bag.fill",          detail: "Dengeli büyüme + gelir; orta tempo.",
+              growthBonus: 0.08, arpuBonus: 0.07, reputationBonus: 1, buildCost: 18_000, buildMonths: 2.5),
+    ]
+    static func projectCategory(_ id: Int) -> ProjectCategoryDef? { projectCategories.first { $0.id == id } }
 }

@@ -10,6 +10,7 @@ enum Icons {
     enum Tab {
         static let office   = "building.2.fill"
         static let team     = "person.2.fill"
+        static let projects = "shippingbox.fill"
         static let growth   = "chart.line.uptrend.xyaxis"
         static let modules  = "square.grid.2x2.fill"
         static let roadmap  = "map.fill"

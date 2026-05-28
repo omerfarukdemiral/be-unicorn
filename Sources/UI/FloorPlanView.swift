@@ -49,25 +49,7 @@ struct FloorPlanView: View {
                           text: "\(model.seatsUsed) / \(model.seatCapacity) koltuk",
                           tint: model.seatsFull ? Palette.warning : Palette.success)
             }
-            speedButton
         }
-    }
-
-    /// Kroki üstündeki köşe hız kontrolü: 1× / 2× / 3× — Ofis tepesindeki boşluğu temizler.
-    private var speedButton: some View {
-        let active = model.speed > 1
-        return Button { Haptics.selection(); model.cycleSpeed() } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "forward.fill").font(.system(size: 11, weight: .bold))
-                Text("\(Int(model.speed))×").font(.numberS)
-            }
-            .foregroundStyle(active ? .white : theme.accent)
-            .padding(.horizontal, Space.s2).frame(height: 28)
-            .background(active ? theme.accent : theme.surfaceHigh, in: Capsule())
-            .overlay(Capsule().stroke(theme.accent.opacity(active ? 0 : 0.5), lineWidth: 1))
-            .shadow(color: active ? theme.accent.opacity(0.45) : .clear, radius: active ? 8 : 0, y: 2)
-        }
-        .buttonStyle(.pressable)
     }
 
     private func metricRow(icon: String, text: String, tint: Color) -> some View {

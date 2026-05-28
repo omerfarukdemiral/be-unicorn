@@ -1,38 +1,56 @@
 import SwiftUI
 
 enum GameTab: CaseIterable {
-    case office, team, growth, modules, roadmap, stats
+    case office, team, projects, growth, modules, roadmap, stats
     var title: String {
         switch self {
-        case .office: return "Ofis"
-        case .team: return "Ekip"
-        case .growth: return "Büyüme"
-        case .modules: return "Modüller"
-        case .roadmap: return "Yol"
-        case .stats: return "İstatistik"
+        case .office:   return "Ofis"
+        case .team:     return "Ekip"
+        case .projects: return "Projeler"
+        case .growth:   return "Büyüme"
+        case .modules:  return "Modüller"
+        case .roadmap:  return "Yol"
+        case .stats:    return "İstatistik"
         }
     }
     /// SF Symbol adını döndürür (emoji yerine).
     var symbolName: String {
         switch self {
-        case .office:  return Icons.Tab.office
-        case .team:    return Icons.Tab.team
-        case .growth:  return Icons.Tab.growth
-        case .modules: return Icons.Tab.modules
-        case .roadmap: return Icons.Tab.roadmap
-        case .stats:   return Icons.Tab.stats
+        case .office:   return Icons.Tab.office
+        case .team:     return Icons.Tab.team
+        case .projects: return Icons.Tab.projects
+        case .growth:   return Icons.Tab.growth
+        case .modules:  return Icons.Tab.modules
+        case .roadmap:  return Icons.Tab.roadmap
+        case .stats:    return Icons.Tab.stats
         }
     }
 }
 
 struct ContentView: View {
     @StateObject private var model: GameModel
-    @State private var tab: GameTab = .office
+    @State private var tab: GameTab = {
+        // İlk tab — opsiyonel launch argümanıyla override edilebilir (test/QA).
+        // `--start-tab team|growth|stats|modules|roadmap|projects|office`.
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "--start-tab"), i + 1 < args.count {
+            switch args[i + 1] {
+            case "team":     return .team
+            case "projects": return .projects
+            case "growth":   return .growth
+            case "modules":  return .modules
+            case "roadmap":  return .roadmap
+            case "stats":    return .stats
+            default:         return .office
+            }
+        }
+        return .office
+    }()
     @State private var topToast: TopToast? = nil
     @State private var toastToken = 0
     @State private var soundEnabled = AudioManager.shared.isEnabled
+    @State private var introAppeared = false   // başlangıç animasyonu (oyun-girişi efekti)
     @Environment(\.scenePhase) private var scenePhase
-    @Namespace private var tabNS
 
     /// Ekranın üstünde yüzen kısa mesaj (kurucu ipucu + olay bildirimleri).
     struct TopToast {
@@ -40,6 +58,11 @@ struct ContentView: View {
         let urgent: Bool
         let token: Int
     }
+
+    /// Sağ kenardaki menü kolonu için ayrılan dikey içerik padding'i (yatay).
+    /// HUD + paneller bu kadar trailing padding'le kolonun altına girmez.
+    /// SideMenu genişliği 60pt + dış margin 8pt + içerik nefes 12pt = 80pt rezerv.
+    private static let sideMenuReservedTrailing: CGFloat = 80
 
     init() {
         _model = StateObject(wrappedValue: GameModel())
@@ -51,39 +74,71 @@ struct ContentView: View {
         ZStack {
             theme.bg.ignoresSafeArea()
 
+            // Ana içerik: HUD + sekme paneli (alt tab bar YOK; sağ kenara yer ayrılır).
             VStack(spacing: 0) {
                 HUDView(model: model, theme: theme)
-                    .padding(.horizontal, Space.s4).padding(.top, Space.s2).padding(.bottom, Space.s1)
+                    .padding(.leading, Space.s4)
+                    .padding(.trailing, Self.sideMenuReservedTrailing) // sağ menü altına girmesin
+                    .padding(.top, Space.s2)
+                    .padding(.bottom, Space.s1)
+                    // Açılış efekti: HUD yukarıdan aşağı yaylı kayar.
+                    .offset(y: introAppeared ? 0 : -36)
+                    .opacity(introAppeared ? 1 : 0)
+                    .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.05), value: introAppeared)
 
                 ZStack(alignment: .top) {
                     Group {
                         switch tab {
-                        case .office:  OfficePanel(model: model, theme: theme)
-                        case .team:    TeamPanel(model: model, theme: theme)
-                        case .growth:  GrowthPanel(model: model, theme: theme)
-                        case .modules: ModulesPanel(model: model, theme: theme)
-                        case .roadmap: RoadmapPanel(model: model, theme: theme)
-                        case .stats:   StatsPanel(model: model, theme: theme)
+                        case .office:   OfficePanel(model: model, theme: theme)
+                        case .team:     TeamPanel(model: model, theme: theme)
+                        case .projects: ProjectsPanel(model: model, theme: theme)
+                        case .growth:   GrowthPanel(model: model, theme: theme)
+                        case .modules:  ModulesPanel(model: model, theme: theme)
+                        case .roadmap:  RoadmapPanel(model: model, theme: theme)
+                        case .stats:    StatsPanel(model: model, theme: theme)
                         }
                     }
+                    // Panel sağdaki menüye girmesin: scroll içeriklerine trailing padding.
+                    .environment(\.sideMenuTrailing, Self.sideMenuReservedTrailing)
+                    .padding(.trailing, Self.sideMenuReservedTrailing)
                     // Tab geçişi: yumuşak fade — sert kesme yerine.
                     .id(tab)
                     .transition(.opacity.combined(with: .offset(y: 6)))
+                    // Açılış efekti: ana içerik hafif zoom-in + fade.
+                    .scaleEffect(introAppeared ? 1 : 0.96)
+                    .opacity(introAppeared ? 1 : 0)
+                    .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(0.1), value: introAppeared)
 
                     // Sağ üstte yüzen bildirim çipi — tıklanabilir, sekmeler arası kalıcı.
                     if let tt = topToast {
                         toastView(tt)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .padding(.top, Space.s2)
-                            .padding(.trailing, Space.s4)
+                            .padding(.trailing, Self.sideMenuReservedTrailing + Space.s2)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                tabBar
             }
 
+            // Sağ kenar dikey ikon menüsü — floating side rail (oyun kültürü).
+            // Açılış efekti: menü sağdan kayar.
+            HStack {
+                Spacer()
+                SideMenu(model: model, tab: $tab, theme: theme, soundEnabled: $soundEnabled)
+                    .padding(.trailing, Space.s2)
+            }
+            .padding(.vertical, Space.s2)
+            .offset(x: introAppeared ? 0 : 90)
+            .opacity(introAppeared ? 1 : 0)
+            .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.15), value: introAppeared)
+            .allowsHitTesting(true)
+
             overlays
+        }
+        .onAppear {
+            // Açılış efekti tetiği (bir kez).
+            guard !introAppeared else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { introAppeared = true }
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -133,7 +188,7 @@ struct ContentView: View {
                 .multilineTextAlignment(.leading)
         }
         .padding(.horizontal, Space.s3).padding(.vertical, Space.s2 + 2)
-        .frame(maxWidth: 250, alignment: .leading)
+        .frame(maxWidth: 240, alignment: .leading)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.m))
         .overlay(RoundedRectangle(cornerRadius: Radius.m).stroke(tint.opacity(0.35)))
         .shadow(color: .black.opacity(0.3), radius: 12, y: 5)
@@ -154,6 +209,8 @@ struct ContentView: View {
     @ViewBuilder private var overlays: some View {
         if !model.hasSeenOnboarding {
             OnboardingOverlay(model: model, theme: theme)
+        } else if !model.companySetupComplete {
+            CompanySetupOverlay(model: model, theme: theme)
         } else if model.pendingBankruptcy {
             BankruptcyView(model: model, theme: theme)
         } else if model.pendingWin {
@@ -176,57 +233,16 @@ struct ContentView: View {
             EmployeeCardView(model: model, theme: theme, deptIndex: dept)
         }
     }
+}
 
-    /// Sesi aç/kapa toggle'ı (tab bar başında küçük ikon). Durum AudioManager + UserDefaults'ta.
-    private var soundToggle: some View {
-        Button {
-            soundEnabled = AudioManager.shared.toggle()   // kalıcı; açınca küçük onay sesi çalar
-            Haptics.selection()
-        } label: {
-            Image(systemName: soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                .font(.system(size: 15, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(soundEnabled ? theme.accent : Palette.textTertiary)
-                .frame(width: 34)
-                .padding(.vertical, Space.s2)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(soundEnabled ? "Sesi kapat" : "Sesi aç")
-    }
-
-    private var tabBar: some View {
-        HStack(spacing: 2) {
-            soundToggle
-            ForEach(GameTab.allCases, id: \.self) { t in
-                let selected = tab == t
-                Button {
-                    Feedback.select()
-                    withAnimation(Motion.smooth) { tab = t }
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: t.symbolName)
-                            .font(.system(size: 18, weight: selected ? .bold : .regular))
-                            .symbolRenderingMode(.hierarchical)
-                            .symbolEffect(.bounce, value: selected)
-                        Text(t.title)
-                            .font(.appText(10, selected ? .bold : .regular))
-                    }
-                    .foregroundStyle(selected ? theme.accent : Palette.textTertiary)
-                    .frame(maxWidth: .infinity).padding(.vertical, Space.s2)
-                    .background {
-                        // Seçili sekme: kayan accent highlight pill.
-                        if selected {
-                            RoundedRectangle(cornerRadius: Radius.m)
-                                .fill(theme.accent.opacity(0.15))
-                                .matchedGeometryEffect(id: "tabHighlight", in: tabNS)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, Space.s2).padding(.vertical, Space.s1)
-        .background(.ultraThinMaterial)
-        .overlay(Rectangle().fill(theme.hairline).frame(height: 1), alignment: .top)
+// MARK: - Environment: sağ menü trailing reservation (paneller okuyabilir)
+private struct SideMenuTrailingKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+extension EnvironmentValues {
+    /// Sağ kenar menü için panellerin bilmesi gereken trailing padding rezervi.
+    var sideMenuTrailing: CGFloat {
+        get { self[SideMenuTrailingKey.self] }
+        set { self[SideMenuTrailingKey.self] = newValue }
     }
 }

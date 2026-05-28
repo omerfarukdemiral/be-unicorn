@@ -10,6 +10,11 @@ struct GameState: Codable {
     var morale: Double = Balance.startMorale  // 0-100
     var founderEquity: Double = 1.0    // kurucu hisse oranı (1.0 = %100)
 
+    // Şirket kimliği (kuruluşta girilir: CEO + şirket + sektör)
+    var profile: CompanyProfile = CompanyProfile()
+    // Şirketin ürün portföyü (projelerle büyüme mekaniği)
+    var projects: [ProjectState] = []
+
     // Ekip (departman jeneratörleri)
     var headcount: [Int]
     var moduleLevels: [Int]
@@ -169,6 +174,17 @@ struct GameState: Codable {
         // Eski kayıt / hiç eşyası olmayan oyuncu: garaj için birkaç basit masa tohumla
         // ki ilk çalışan(lar) oturabilsin (taban koltuk + 2 masa = makul başlangıç).
         if ownedItems.isEmpty { ownedItems = [0: 2] }
+
+        // Şirket profili: sektör katalog dışıysa güvenli tabana çek.
+        if Balance.sector(profile.sector) == nil { profile.sector = 0 }
+        // Projeler: ilerleme 0-1'e sabitle; geçersiz kategoriyi at; tamamlanmışı canlı say.
+        projects = projects.compactMap { p in
+            guard Balance.projectCategory(p.category) != nil else { return nil }
+            var fixed = p
+            fixed.devProgress = min(1, max(0, fixed.devProgress))
+            if fixed.devProgress >= 1 { fixed.isLive = true }
+            return fixed
+        }
     }
 
     private static func resized(_ array: [Int], to n: Int) -> [Int] {

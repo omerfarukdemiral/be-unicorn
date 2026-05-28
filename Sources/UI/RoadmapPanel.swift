@@ -8,6 +8,9 @@ struct RoadmapPanel: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Space.s3) {
+                // Şirket kimliği — kuruluşta girilen CEO + şirket + sektör + portföy.
+                CompanyHeaderCard(model: model, theme: theme)
+
                 PanelCard(theme: theme) {
                     VStack(alignment: .leading, spacing: Space.s3) {
                         HStack(alignment: .top) {
@@ -131,5 +134,66 @@ private struct StageRow: View {
                     .foregroundStyle(isCurrent ? .white : theme.subtle)
             }
         }
+    }
+}
+
+// MARK: - Şirket kimlik kartı (CEO + şirket + sektör + portföy özeti)
+
+/// Yol haritasının üstünde duran kimlik kartı: kuruluşta girilen profili
+/// kalıcı olarak görünür kılar. CEO + şirket adı + sektör + portföy özeti.
+private struct CompanyHeaderCard: View {
+    @ObservedObject var model: GameModel
+    var theme: Theme
+
+    var body: some View {
+        PanelCard(theme: theme, highlighted: true) {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                HStack(spacing: Space.s3) {
+                    // Sektör ikonu — kimliğin görsel imzası.
+                    Image(systemName: model.sectorDef.icon)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color(hex: model.sectorDef.colorHex))
+                        .frame(width: 46, height: 46)
+                        .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.companyName.isEmpty ? "Şirket" : model.companyName)
+                            .font(.titleM).foregroundStyle(theme.text).lineLimit(1)
+                        HStack(spacing: 5) {
+                            Text(model.sectorDef.name)
+                                .font(.numberXS).foregroundStyle(Color(hex: model.sectorDef.colorHex))
+                            Text("·").font(.numberXS).foregroundStyle(theme.subtle)
+                            Text(model.currentStage.name).font(.numberXS).foregroundStyle(theme.subtle)
+                        }
+                    }
+                    Spacer()
+                }
+                // CEO satırı + portföy satırı (kimliğin gerçek-hayat detayları).
+                HStack(spacing: Space.s3) {
+                    identityCell(icon: "person.crop.circle.fill",
+                                 label: model.founderTitle,
+                                 value: model.founderFullName.isEmpty ? "—" : model.founderFullName)
+                    identityCell(icon: "shippingbox.fill",
+                                 label: "portföy",
+                                 value: "\(model.liveProjectCount) yayında / \(model.projects.count)")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func identityCell(icon: String, label: String, value: String) -> some View {
+        HStack(spacing: Space.s2) {
+            Image(systemName: icon).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(theme.accent)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(.caption).kerning(0.5).foregroundStyle(theme.subtle)
+                Text(value).font(.numberS).foregroundStyle(theme.text).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Space.s2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.s))
     }
 }

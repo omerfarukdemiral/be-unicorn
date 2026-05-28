@@ -75,6 +75,32 @@ enum NarrativeContent {
         "Bir kurşunu daha savuşturdun. Soğukkanlılık kazandırdı.",
     ]
 
+    // MARK: Kuruluş — isim önerileri (kurucu + şirket + proje)
+    static let founderFirstNames = ["Ada", "Deniz", "Eren", "Mira", "Kaan", "Zeynep", "Arda",
+                                    "Lina", "Emir", "Selin", "Can", "Naz", "Toprak", "Ela",
+                                    "Bora", "Defne", "Alp", "İpek", "Mert", "Derin"]
+    static let founderLastNames = ["Yılmaz", "Demir", "Kaya", "Şahin", "Çelik", "Aydın", "Arslan",
+                                   "Doğan", "Koç", "Aksoy", "Taş", "Polat", "Yıldız", "Öztürk"]
+    static let companyNameSeeds = ["Nova", "Flux", "Hyper", "Volt", "Loop", "Drift", "Quanta",
+                                   "Pulse", "Echo", "Apex", "Zen", "Cobalt", "Mint", "Tidal",
+                                   "Forge", "Helix", "Lumen", "Orbit", "Vexa", "Nimbus"]
+    static let companyNameSuffixes = ["Labs", "AI", "Tech", "Soft", "ify", "Works", "Hub", "Stack", "io"]
+    static let projectNameSeeds = ["Atlas", "Pulse", "Spark", "Beacon", "Nimbus", "Quantum",
+                                   "Horizon", "Vertex", "Aurora", "Cipher", "Pioneer", "Catalyst"]
+
+    static func randomFounderName() -> (first: String, last: String) {
+        (founderFirstNames.randomElement() ?? "Ada", founderLastNames.randomElement() ?? "Yılmaz")
+    }
+    static func randomCompanyName() -> String {
+        let seed = companyNameSeeds.randomElement() ?? "Nova"
+        let suffix = companyNameSuffixes.randomElement() ?? "Labs"
+        // Bazı son ekler bitişik ("ify"/"io"), bazıları ayrı kelime.
+        return ["ify", "io"].contains(suffix) ? "\(seed)\(suffix)" : "\(seed) \(suffix)"
+    }
+    static func randomProjectName() -> String {
+        projectNameSeeds.randomElement() ?? "Atlas"
+    }
+
     static func runwayTip(months: Double) -> String {
         if months.isInfinite { return "Karlısın — para artık seninle çalışıyor." }
         if months < 1 { return "Runway bir aydan az! Acil aksiyon gerek." }

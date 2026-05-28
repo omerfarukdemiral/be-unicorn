@@ -53,7 +53,7 @@ struct OnboardingOverlay: View {
                     else { model.completeOnboarding() }
                 } label: {
                     HStack(spacing: Space.s2) {
-                        Text(step < steps.count - 1 ? "Devam" : "Şirketi Kur")
+                        Text(step < steps.count - 1 ? "Devam" : "Şirketini Kur")
                         if step == steps.count - 1 {
                             Image(systemName: "arrow.right.circle.fill")
                         }

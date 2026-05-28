@@ -1,6 +1,12 @@
 import SwiftUI
 
-/// Üst gösterge: nakit (kahraman), runway, kullanıcı, MRR, moral, değerleme + tur ilerlemesi.
+/// Üst gösterge — dikey mobil OYUN tarzı yüzen pill rozetleri.
+///
+/// Tasarım:
+/// - Tam-genişlik HUD bloğu değil; tepede kompakt, yüzen "game badge" şeritleri.
+/// - 1. sıra: kahraman nakit rozet (büyük, glow) + tıklanabilir lig rozeti.
+/// - 2. sıra: kullanıcı / MRR / runway / moral / değerleme mini-badge'leri (yatay scroll).
+/// - Altta ince funding-progress + moral bar şeridi (eski iki bar — game HUD'a uygun ince form).
 struct HUDView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
@@ -12,63 +18,59 @@ struct HUDView: View {
     private var negative: Bool { model.cash < 0 }
 
     var body: some View {
-        VStack(spacing: Space.s3) {
-            // 1) Kahraman satırı: nakit solda büyük, değerleme/hisse sağda ikincil grup.
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: Space.s1) {
-                    Text(model.currentStage.name.uppercased())
-                        .font(.eyebrow)
-                        .kerning(1.0)
-                        .foregroundStyle(theme.accent)
-                    // Lig rozeti + çeyrek ilerlemesi (completed-cycle göstergesi).
-                    // Tıkla → canlı leaderboard (rakip kohort + gerçek bahis).
-                    LeaguePill(model: model, theme: theme) { showLeaderboard = true }
-                    Text(BigNumber.money(model.cash))
-                        .font(.displayL)
-                        .foregroundStyle(negative ? Palette.danger : theme.text)
-                        .contentTransition(.numericText())
-                        .scaleEffect(cashPop)
-                        .background(
-                            // Negatif nakit: hafif kırmızı pulse.
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Palette.danger.opacity(negative && pulse ? 0.14 : 0))
-                                .padding(.horizontal, -8).padding(.vertical, -3)
-                        )
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("DEĞERLEME")
-                        .font(.caption)
-                        .kerning(0.6)
-                        .foregroundStyle(theme.subtle)
-                    Text(BigNumber.money(model.valuation))
-                        .font(.numberM)
-                        .foregroundStyle(theme.text)
-                        .contentTransition(.numericText())
-                    Text("Hisse %\(Int(model.founderEquity * 100))")
-                        .font(.numberXS)
-                        .foregroundStyle(theme.subtle)
-                }
-            }
+        VStack(spacing: Space.s2) {
+            // 1) Şirket kimliği — küçük eyebrow (oyun "level" şeridi gibi).
+            companyEyebrow
 
-            // 2) 3 pill — surfaceHigh hücreler, tek satır ikon+değer ortalı, etiket altta.
+            // 2) Kahraman satırı: nakit rozet + lig rozeti yan yana.
             HStack(spacing: Space.s2) {
-                statSF(Icons.Metric.users, BigNumber.format(model.users), "kullanıcı")
-                statSF(Icons.Metric.mrr,   BigNumber.money(model.mrr) + "/ay", "MRR")
-                statSF(runwaySymbol, runwayText, "runway", tint: runwayTint)
+                cashBadge
+                Spacer(minLength: 0)
+                LeaguePill(model: model, theme: theme) { showLeaderboard = true }
             }
+            .scaleEffect(cashPop)
 
-            // 3) İki bar — aynı Inter etiket stili, hizalı sol etiket + monospace değer.
-            VStack(spacing: Space.s2) {
-                bar(label: "Moral", value: model.morale / 100,
-                    fill: moraleColor, valueText: "\(Int(model.morale))",
-                    valueColor: moraleColor)
+            // 3) Mini badge şeridi — yatay scroll, gerektiğinde kayar.
+            // Sağ kenarda soft fade mask: badge'ler "kesik" değil, kayan bir şerit hissi versin.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    usersBadge
+                    mrrBadge
+                    runwayBadge
+                    moraleBadge
+                    valuationBadge
+                    equityBadge
+                }
+                .padding(.horizontal, 2)
+                .padding(.trailing, 12)   // son rozet için soluklaşan kenara nefes
+            }
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: 0.88),
+                        .init(color: .white.opacity(0), location: 1)
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            )
+
+            // 4) Funding + moral şeritleri — ince oyunsu bar (eski iki bar rafine).
+            VStack(spacing: 5) {
+                miniBar(label: "Moral",
+                        value: model.morale / 100,
+                        fill: moraleColor,
+                        valueText: "\(Int(model.morale))",
+                        valueColor: moraleColor)
                 if let next = model.nextStage {
-                    bar(label: next.name, value: model.raiseProgress,
-                        fill: theme.accent, valueText: "%\(Int(model.raiseProgress * 100))",
-                        valueColor: theme.accent)
+                    miniBar(label: next.name,
+                            value: model.raiseProgress,
+                            fill: theme.accent,
+                            valueText: "%\(Int(model.raiseProgress * 100))",
+                            valueColor: theme.accent)
                 }
             }
+            .padding(.top, 2)
         }
         .onAppear { startPulseIfNeeded() }
         .sheet(isPresented: $showLeaderboard) {
@@ -78,13 +80,123 @@ struct HUDView: View {
         .onChange(of: model.cash) { old, new in
             // Büyük nakit artışında kısa scale-pop.
             if new - old > 1000 {
-                withAnimation(Motion.snappy) { cashPop = 1.08 }
+                withAnimation(Motion.snappy) { cashPop = 1.05 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
                     withAnimation(Motion.snappy) { cashPop = 1 }
                 }
             }
         }
     }
+
+    // MARK: - Üst kimlik şeridi
+
+    /// Şirket adı + evre — incecik eyebrow şeridi. "Mobil app" tarzı blok yerine oyun başlığı gibi.
+    private var companyEyebrow: some View {
+        HStack(spacing: 5) {
+            Image(systemName: Icons.Tab.office)
+                .font(.system(size: 9, weight: .black))
+                .foregroundStyle(theme.accent)
+            Text(model.companyName.isEmpty ? model.currentStage.name.uppercased()
+                                           : model.companyName)
+                .font(.eyebrow)
+                .kerning(0.6)
+                .foregroundStyle(theme.accent)
+                .lineLimit(1).truncationMode(.tail)
+            if !model.companyName.isEmpty {
+                Text("·").font(.eyebrow).foregroundStyle(theme.subtle)
+                Text(model.currentStage.name.uppercased())
+                    .font(.eyebrow).kerning(1.0)
+                    .foregroundStyle(theme.subtle)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Rozet bileşenleri
+
+    /// Kahraman nakit rozet — büyük, glow'lu; negatifte danger renk + pulse halkası.
+    /// Tycoon-sim hissi: yuvarlak dolar ikonu + büyük rakam + "NAKİT" mikro etiket.
+    private var cashBadge: some View {
+        StatBadge(
+            symbol: negative ? Icons.Metric.warning : "dollarsign.circle.fill",
+            value: BigNumber.money(model.cash),
+            label: "nakit",
+            tint: negative ? Palette.danger : Palette.success,
+            prominent: true
+        )
+        .background(
+            // Negatif nakit: kırmızı pulse halka (mevcut "tehlike" davranışı korunur).
+            Capsule()
+                .fill(Palette.danger.opacity(negative && pulse ? 0.22 : 0))
+                .padding(-3)
+                .blur(radius: 4)
+        )
+    }
+
+    private var usersBadge: some View {
+        StatBadge(symbol: Icons.Metric.users,
+                  value: BigNumber.format(model.users),
+                  tint: theme.accent)
+    }
+    private var mrrBadge: some View {
+        StatBadge(symbol: Icons.Metric.mrr,
+                  value: BigNumber.money(model.mrr) + "/ay",
+                  tint: Palette.success)
+    }
+    private var runwayBadge: some View {
+        StatBadge(symbol: runwaySymbol, value: runwayText, tint: runwayTint)
+    }
+    private var moraleBadge: some View {
+        StatBadge(symbol: Icons.Metric.morale,
+                  value: "\(Int(model.morale))",
+                  tint: moraleColor)
+    }
+    private var valuationBadge: some View {
+        StatBadge(symbol: Icons.Metric.valuation,
+                  value: BigNumber.money(model.valuation),
+                  tint: Palette.gold)
+    }
+    private var equityBadge: some View {
+        StatBadge(symbol: Icons.Metric.reputation,
+                  value: "%\(Int(model.founderEquity * 100))",
+                  tint: Palette.unicorn)
+    }
+
+    // MARK: - Mini bar (game HUD progress)
+
+    /// Tek satır, ince oyun-tarzı progress bar.
+    private func miniBar(label: String, value: Double, fill: Color,
+                         valueText: String, valueColor: Color) -> some View {
+        HStack(spacing: Space.s2) {
+            Text(label.uppercased())
+                .font(.appText(9, .black))
+                .kerning(0.5)
+                .foregroundStyle(theme.subtle)
+                .frame(width: 64, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.07))
+                    Capsule()
+                        .fill(LinearGradient(colors: [fill.opacity(0.9), fill],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geo.size.width * CGFloat(max(0, min(1, value))))
+                        .shadow(color: fill.opacity(0.4), radius: 4, y: 0)
+                }
+            }
+            .frame(height: 5)
+            Text(valueText)
+                .font(.numberXS)
+                .foregroundStyle(valueColor)
+                .frame(width: 42, alignment: .trailing)
+                .lineLimit(1)
+                .contentTransition(.numericText())
+        }
+    }
+
+    // MARK: - Yardımcılar
 
     private func startPulseIfNeeded() {
         if negative {
@@ -96,54 +208,6 @@ struct HUDView: View {
         }
     }
 
-    /// SF Symbol ile küçük istatistik hücresi (surfaceHigh zemin).
-    private func statSF(_ symbol: String, _ value: String, _ label: String, tint: Color? = nil) -> some View {
-        VStack(spacing: 2) {
-            HStack(spacing: Space.s1) {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(tint ?? theme.accent)
-                Text(value)
-                    .font(.numberS)
-                    .foregroundStyle(theme.text)
-                    .contentTransition(.numericText())
-                    .lineLimit(1).minimumScaleFactor(0.7)
-            }
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(theme.subtle)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Space.s2)
-        .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.s))
-    }
-
-    /// Tek satır bar: sabit genişlikte sol etiket + track + sağda hizalı değer.
-    private func bar(label: String, value: Double, fill: Color,
-                     valueText: String, valueColor: Color) -> some View {
-        HStack(spacing: Space.s2) {
-            Text(label)
-                .font(.labelText)
-                .foregroundStyle(theme.subtle)
-                .frame(width: 56, alignment: .leading)
-                .lineLimit(1)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(theme.surfaceHigh)
-                    Capsule().fill(fill)
-                        .frame(width: geo.size.width * CGFloat(max(0, min(1, value))))
-                }
-            }
-            .frame(height: 7)
-            Text(valueText)
-                .font(.numberXS)
-                .foregroundStyle(valueColor)
-                .frame(width: 40, alignment: .trailing)
-                .lineLimit(1)
-                .contentTransition(.numericText())
-        }
-    }
-
     /// Runway durumuna göre SF Symbol adı.
     private var runwaySymbol: String {
         model.runwayMonths.isInfinite ? Icons.Metric.runwayInf
@@ -152,7 +216,7 @@ struct HUDView: View {
     /// Runway durumuna göre renk tonu.
     private var runwayTint: Color {
         model.runwayMonths.isInfinite ? Palette.success
-            : (model.runwayMonths < 2 ? Palette.danger : theme.accent)
+            : (model.runwayMonths < 2 ? Palette.danger : Palette.warning)
     }
     private var runwayText: String {
         let m = model.runwayMonths
