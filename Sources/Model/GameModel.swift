@@ -998,12 +998,15 @@ final class GameModel: ObservableObject {
             state.reputation = min(100, state.reputation + Balance.sprintWinReputationBonus)
         }
 
-        pendingSprintClose = SprintClose(sprint: state.sprintIndex,
-                                         goal: goal,
-                                         success: success,
-                                         doneValue: result.done,
-                                         targetValue: result.target)
-        if success { Feedback.success() } else { Feedback.failure() }   // sprint sonucu
+        // En KÜÇÜK döngü olarak sprint EN HAFİF dokunuş olmalı: engelleyici modal +
+        // elle "Yeni Sprint" tıklaması artık YOK (spam'in kaynağıydı). Sonucu sağ-üst
+        // sessiz toast olarak göster ve hemen taze sprint başlat — akış kesilmez.
+        // (Daha büyük döngüler — çeyrek/sezon — blocking modal olmaya devam eder.)
+        pendingToast = success
+            ? "Sprint \(state.sprintIndex) tamam · \(goal.title) — hedefe ulaştın!"
+            : "Sprint \(state.sprintIndex) kapandı · hedef tutmadı, yeni sprint başladı."
+        if success { Feedback.success() } else { Feedback.select() }
+        startNewSprint()   // otomatik ilerle
         save()
     }
 

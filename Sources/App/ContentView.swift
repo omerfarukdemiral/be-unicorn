@@ -135,6 +135,8 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .allowsHitTesting(false)
 
+            timeStateOverlay
+
             overlays
         }
         // Alt sticky chunky tab bar — vertical mobil oyun standart düzeni.
@@ -156,6 +158,10 @@ struct ContentView: View {
                 // Test/QA: --open-lessons defter sheet'ini açılışta aç (otomatik screenshot için).
                 if args.contains("--open-lessons") {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { lessonsOpen = true }
+                }
+                // QA: --start-paused → zaman-durumu overlay'ini doğrulamak için duraklatılmış aç.
+                if args.contains("--start-paused") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.isPaused = true }
                 }
                 // Not: --force-decision GameModel.init içinde de işlenir (model katmanına da).
             }
@@ -270,6 +276,58 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(t.title)
+    }
+
+    /// Simülasyon zaman-durumu görsel geri-bildirimi: oyuncu duraklatma/hız değişimini
+    /// EKRANDA net görsün diye. Duraklatma → amber kenar çerçeve + yumuşak scrim + alt
+    /// "Duraklatıldı" bandı (dokununca devam). Hızlı (2×/3×) → accent kenar çerçeve.
+    /// 1× & oynar durumda hiçbir şey gösterilmez. (Modallar bunun ÜSTÜNDE kalır.)
+    @ViewBuilder private var timeStateOverlay: some View {
+        let paused = model.isPaused
+        let fast = model.speed > 1 && !paused
+        ZStack {
+            // Duraklatınca hafif scrim — "donmuş" hissi (tıklamayı engellemez).
+            if paused {
+                Palette.warning.opacity(0.05)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+            // Ekran kenarı durum çerçevesi (kayıt-modu kırmızı çerçeve mantığı).
+            if paused || fast {
+                Rectangle()
+                    .strokeBorder(paused ? Palette.warning : theme.accent,
+                                  lineWidth: 2.5)
+                    .opacity(paused ? 0.85 : 0.5)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+            // Duraklatma bandı — alt-merkez, tab bar üstünde, dokununca devam.
+            if paused {
+                VStack {
+                    Spacer()
+                    Button { Haptics.selection(); model.togglePause() } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "pause.fill")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("DURAKLATILDI")
+                                .font(.eyebrow).kerning(1.2)
+                            Text("· devam için dokun")
+                                .font(.appText(11, .medium))
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, Space.s4).padding(.vertical, Space.s2 + 2)
+                        .background(Palette.warning.opacity(0.92), in: Capsule())
+                        .overlay(Capsule().stroke(.white.opacity(0.2), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+                    }
+                    .buttonStyle(.pressable)
+                    .padding(.bottom, Space.s4)
+                }
+            }
+        }
+        .animation(Motion.snappy, value: paused)
+        .animation(Motion.snappy, value: fast)
     }
 
     @ViewBuilder private var overlays: some View {

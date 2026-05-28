@@ -108,9 +108,34 @@ enum DecisionSystem {
         let eligible = DecisionContent.all.filter { isEligible($0, model: model, state: state) }
         // Havuz boşaldıysa (örn. tüm once kartları tükendi, erken evre) DEAD AIR olmasın:
         // jenerik, etkisiz bir "mentor ipucu" kartı dön — oyuncu akışta kalır.
-        guard !eligible.isEmpty else { return mentorTipFallback() }
-        return weightedPick(from: eligible, health: model.companyHealth,
-                            chainCount: state.crisisChainCount)
+        let raw: DecisionCard
+        if eligible.isEmpty {
+            raw = mentorTipFallback()
+        } else if let picked = weightedPick(from: eligible, health: model.companyHealth,
+                                            chainCount: state.crisisChainCount) {
+            raw = picked
+        } else {
+            return nil
+        }
+        // BAĞLAM ENTERPOLASYONU — kart metnindeki {{company}}, {{firstName}}, {{sector}},
+        // {{project}}, {{founder}} placeholder'larını oyuncunun şirket bilgileriyle doldur.
+        // Yer tutucu içermeyen kartlarda metin değişmez (geriye uyumlu).
+        let ctx = CompanyContext(state: state)
+        return interpolated(raw, with: ctx)
+    }
+
+    /// Kartı + tüm seçim satırlarını CompanyContext ile enterpole edilmiş bir kopyasıyla
+    /// değiştirir. DecisionCard `let` olduğundan yeni instance üretmek tek yol.
+    private static func interpolated(_ card: DecisionCard, with ctx: CompanyContext) -> DecisionCard {
+        let newChoices = card.choices.map { c in
+            DecisionChoice(ctx.interpolate(c.label),
+                           detail: c.detail.map { ctx.interpolate($0) },
+                           effects: c.effects,
+                           result: c.resultLine.map { ctx.interpolate($0) })
+        }
+        return DecisionCard(card.id, category: card.category, speaker: card.speaker,
+                            icon: card.icon, prompt: ctx.interpolate(card.prompt),
+                            once: card.once, trigger: card.trigger, choices: newChoices)
     }
 
     /// Karar havuzu geçici olarak boşaldığında gösterilen nötr fallback kartı.

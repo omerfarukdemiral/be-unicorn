@@ -193,8 +193,9 @@ enum Balance {
     static let seasonFinaleReputationBonus: Double = 8
 
     // MARK: Haftalık Sprint (çeyrek içi kısa, kapanan döngü — completed-cycle)
-    // Sprint süresi: kaç oyun-ayı = 1 sprint ("hafta"). 0.5 → çeyrekte ~6 sprint.
-    static let monthsPerSprint: Double = 0.5
+    // Sprint süresi: kaç oyun-ayı = 1 sprint ("hafta"). 1.0 → çeyrekte tam 3 sprint
+    // (monthsPerQuarter=3). 1x'te ~60sn — eskiden 0.5=30sn idi ve kapanış spam yapıyordu.
+    static let monthsPerSprint: Double = 1.0
     // Sprint başarı ödülü: küçük moral + itibar dokunuşu (nakit YOK — ekonomi korunur).
     static let sprintWinMoraleBonus: Double = 4
     static let sprintWinReputationBonus: Double = 2

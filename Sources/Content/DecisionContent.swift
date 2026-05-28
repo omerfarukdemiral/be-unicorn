@@ -8,7 +8,7 @@ enum DecisionContent {
         // MARK: - Başlangıç / Melek Yatırım
 
         DecisionCard("angel-1", category: .investor, speaker: "Melek Yatırımcı", icon: "👼",
-            prompt: "Bir melek yatırımcı garajına geldi: \"50 bin dolar veririm, karşılığında %8 hisse.\" Kabul mü?",
+            prompt: "Melek yatırımcı {{company}}'a uğradı: \"{{firstName}}, 50 bin dolar veririm — %8 hisse karşılığında. {{project}} ilgimi çekti.\" Kabul mü?",
             once: true,
             choices: [
                 .init("Kabul et", detail: "+$50K nakit / −%8 hisse kalıcı", effects: [.cash(50_000), .equity(-0.08), .reputation(5)],
@@ -18,7 +18,7 @@ enum DecisionContent {
             ]),
 
         DecisionCard("friends-family", category: .investor, speaker: "Aile & Arkadaşlar", icon: "👨‍👩‍👧",
-            prompt: "Annen ve eski sınıf arkadaşın toplam 20 bin dolar yatırmak istiyor. Kişisel ilişkileri işe karıştırmak riskli.",
+            prompt: "{{firstName}}, annen ve eski sınıf arkadaşın {{company}}'a toplam 20 bin dolar yatırmak istiyor. Kişisel ilişkileri işe karıştırmak riskli.",
             once: true,
             choices: [
                 .init("Al, teşekkür et", detail: "+$20K şimdi / ilişki teminat", effects: [.cash(20_000), .morale(4), .reputation(-1)],
@@ -127,7 +127,7 @@ enum DecisionContent {
         // MARK: - Basın & İtibar
 
         DecisionCard("press-launch", category: .press, speaker: "Teknoloji Blogu", icon: "📰",
-            prompt: "Tanınmış bir teknoloji blogu seni yazmak istiyor. Ama erken; ürün tam hazır değil.",
+            prompt: "Tanınmış bir teknoloji blogu {{company}} hakkında ({{sector}} dikeyinde) yazmak istiyor. Ama erken; {{project}} tam hazır değil.",
             trigger: .minUsers(50),
             choices: [
                 .init("Röportajı ver", detail: "+itibar + kullanıcı patlaması / hazır değilse churn", effects: [.reputation(10), .usersPercent(0.35), .morale(-3)],
@@ -147,7 +147,7 @@ enum DecisionContent {
             ]),
 
         DecisionCard("famous-tweet", category: .press, speaker: "Ünlü Teknoloji Figürü", icon: "🐦",
-            prompt: "Milyonlarca takipçisi olan biri ürünü tweet'ledi: \"Bu inanılmaz!\" Sunucular zaten zorlanıyor.",
+            prompt: "Milyonlarca takipçisi olan biri {{project}}'i tweet'ledi: \"Bu inanılmaz!\" {{company}}'nın sunucuları zaten zorlanıyor.",
             trigger: .minUsers(500),
             choices: [
                 .init("Tweet'e dayan, büyü", detail: "+çok kullanıcı / nakit yakıt + çöküş riski", effects: [.usersPercent(0.45), .cash(-9_000), .reputation(10), .morale(-3)],
@@ -189,7 +189,7 @@ enum DecisionContent {
             ]),
 
         DecisionCard("server-crash", category: .crisis, speaker: "Mühendislik", icon: "🔥",
-            prompt: "Ana sunucu çöktü. Kullanıcılar bağlanamıyor, sosyal medya kaynıyor. Her dakika itibar kaybı.",
+            prompt: "{{project}}'in ana sunucusu çöktü. Kullanıcılar bağlanamıyor, sosyal medya kaynıyor. Her dakika {{company}}'nın itibarı eriyor.",
             trigger: .minUsers(300),
             choices: [
                 .init("Herkesi çağır, gece nöbeti", detail: "+kahramanlık + öğrenme / ekip tükenmesi başlar", effects: [.cash(-5_000), .morale(-7), .reputation(5), .usersPercent(-0.03)],
