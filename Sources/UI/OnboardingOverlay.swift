@@ -27,14 +27,21 @@ struct OnboardingOverlay: View {
                 .ignoresSafeArea()
             VStack(spacing: Space.s5) {
                 Spacer()
-                // Her adım için büyük SF Symbol hero ikonu
-                Image(systemName: steps[step].0)
-                    .font(.system(size: 72, weight: .bold))
-                    .foregroundStyle(theme.accent)
-                    .symbolEffect(.pulse)
-                    .padding(.bottom, Space.s1)
-                    .id(step)
-                    .transition(.scale.combined(with: .opacity))
+                // Hero görseli: 1. adımda dağ patikası SwiftUI Path illüstrasyonu;
+                // diğer adımlarda SF Symbol fallback (büyük accent).
+                Group {
+                    if step == 0 {
+                        MountainPathHero(accent: theme.accent, size: 132)
+                    } else {
+                        Image(systemName: steps[step].0)
+                            .font(.system(size: 72, weight: .bold))
+                            .foregroundStyle(theme.accent)
+                            .symbolEffect(.pulse)
+                    }
+                }
+                .padding(.bottom, Space.s1)
+                .id(step)
+                .transition(.scale.combined(with: .opacity))
                 Text(steps[step].1).font(.appNumber(26, .heavy))
                     .foregroundStyle(theme.text)
                 Text(steps[step].2).font(.bodyL)

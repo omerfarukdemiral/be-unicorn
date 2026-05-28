@@ -65,15 +65,13 @@ struct FundingRoundView: View {
                     .ignoresSafeArea()
             }
             VStack(spacing: Space.s4) {
-                // Hero ikon — büyük SF Symbol + parıltı halkası, sevinçli milestone.
+                // Hero görseli: stilize çek + parıltı halkası, milestone yatırım vurgusu.
                 ZStack {
                     if appeared { CelebrationRing(color: Palette.gold) }
-                    Image(systemName: Icons.Screen.funding)
-                        .font(.system(size: 60, weight: .bold))
-                        .foregroundStyle(theme.accent)
+                    FundingCheckHero(accent: theme.accent, size: 110)
                         .scaleEffect(appeared ? 1 : 0.4)
                 }
-                .frame(height: 90)
+                .frame(height: 110)
 
                 // "Tur kapandı" üst etiket — gold prestij vurgusu.
                 Text("YATIRIM TURU KAPANDI")
@@ -146,17 +144,15 @@ struct WinView: View {
             if appeared { ConfettiBurst().ignoresSafeArea() }
 
             VStack(spacing: Space.s4) {
-                // Zafer ikonu — taç + tek sade hero ışıltı (kontrollü kutlama).
+                // Zafer ikonu — stilize unicorn + tek sade hero ışıltı (kontrollü kutlama).
                 ZStack {
                     if appeared {
                         CelebrationRing(color: Palette.unicorn)
                     }
-                    Image(systemName: Icons.Screen.win)
-                        .font(.system(size: 84, weight: .bold))
-                        .foregroundStyle(Palette.unicorn)
+                    UnicornHero(accent: Palette.unicorn, size: 140)
                         .scaleEffect(appeared ? 1 : 0.5)
                 }
-                .frame(height: 108)
+                .frame(height: 140)
 
                 Text("UNICORN!")
                     .font(.displayXL)

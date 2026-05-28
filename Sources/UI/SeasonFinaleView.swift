@@ -55,23 +55,14 @@ struct SeasonFinaleView: View {
         }
     }
 
-    // MARK: Hero — tek sade hero ışıltı (kontrollü kutlama, neon halo YOK).
+    // MARK: Hero — stilize madalya (Path) + tek sade ışıltı halkası.
     private var hero: some View {
         ZStack {
             if appeared {
-                SeasonGlowRing(color: Palette.gold, size: 100)
+                SeasonGlowRing(color: Palette.gold, size: 116)
             }
-            ZStack {
-                Circle()
-                    .fill(titleColor.opacity(0.14))
-                    .frame(width: 100, height: 100)
-                    .overlay(Circle().stroke(titleColor.opacity(0.45), lineWidth: 1.5))
-                Image(systemName: finale.title.icon)
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(titleColor)
-                    .symbolEffect(.bounce, value: appeared)
-            }
-            .scaleEffect(appeared ? 1 : 0.5)
+            MedalHero(accent: titleColor, size: 116)
+                .scaleEffect(appeared ? 1 : 0.5)
         }
         .frame(height: 116)
     }

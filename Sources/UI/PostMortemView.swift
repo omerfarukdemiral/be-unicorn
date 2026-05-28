@@ -56,15 +56,8 @@ struct PostMortemView: View {
 
     private var header: some View {
         VStack(spacing: Space.s2) {
-            // Bilge ikon — amber, dramatik kırmızı değil.
-            ZStack {
-                Circle()
-                    .fill(penColor.opacity(0.12))
-                    .frame(width: 64, height: 64)
-                Image(systemName: "book.pages.fill")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(penColor)
-            }
+            // Hero görseli: iniş + ufukta yeniden başlangıç noktası — sakin koçluk tonu.
+            HorizonChartHero(accent: penColor, size: 96)
             Text("BURADA NE OLDU?")
                 .font(.eyebrow).tracking(1.4)
                 .foregroundStyle(penColor)
