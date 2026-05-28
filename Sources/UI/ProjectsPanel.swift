@@ -101,7 +101,19 @@ private struct ProjectRow: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(project.name).font(.appText(15, .bold)).foregroundStyle(theme.text)
                             .lineLimit(1)
-                        Text(cat.name).font(.numberXS).foregroundStyle(theme.subtle)
+                        HStack(spacing: 5) {
+                            Text(cat.name).font(.numberXS).foregroundStyle(theme.subtle)
+                            // Takım rozeti: bu projeye atanmış kişi sayısı + ilk üyenin adı.
+                            let team = model.teamMembers(forProject: project.id)
+                            if !team.isEmpty {
+                                Text("·").font(.numberXS).foregroundStyle(theme.subtle)
+                                Image(systemName: "person.2.fill")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(theme.accent)
+                                Text(teamLabel(team)).font(.numberXS).foregroundStyle(theme.subtle)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                     Spacer()
                     statusBadge
@@ -151,6 +163,14 @@ private struct ProjectRow: View {
         Text(text).font(.caption).kerning(0.6).foregroundStyle(color)
             .padding(.horizontal, Space.s2).padding(.vertical, Space.s1)
             .background(color.opacity(0.15), in: Capsule())
+    }
+
+    /// "Ada + 2" / "Ada Yılmaz" gibi proje takımı özeti. Tek kişi varsa tam ad,
+    /// çoklu ise ilk üyenin adı + "+N" rozeti — kart başlığı bilgisi daraltmak için.
+    private func teamLabel(_ team: [TeamMember]) -> String {
+        guard let first = team.first else { return "" }
+        if team.count == 1 { return first.firstName }
+        return "\(first.firstName) +\(team.count - 1)"
     }
 
     private func contributionChip(_ symbol: String, _ text: String, _ color: Color) -> some View {

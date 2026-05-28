@@ -198,3 +198,142 @@ final class CompanyProjectsTests: XCTestCase {
         XCTAssertEqual(model.projects.first?.category, 2)
     }
 }
+
+// MARK: - TeamMember + kimlik katmanı (hire/fire/founder/atama)
+
+/// Çalışanların bireysel kimliği + headcount ile senkronu + kurucu korunumu + iflas-sonrası kimlik.
+final class TeamMemberTests: XCTestCase {
+
+    @MainActor
+    private func freshModel() -> GameModel {
+        SaveManager.wipe()
+        return GameModel()
+    }
+
+    @MainActor
+    func testSetupCreatesNamedFounderAsFirstMember() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Yılmaz",
+                                   company: "Nova", sector: 0,
+                                   firstProjectName: "Atlas", firstProjectCategory: 0)
+        XCTAssertEqual(model.members.count, 1, "Kurulduktan sonra yalnızca kurucu olmalı")
+        let founder = model.founderMember
+        XCTAssertNotNil(founder)
+        XCTAssertEqual(founder?.firstName, "Ada")
+        XCTAssertEqual(founder?.lastName, "Yılmaz")
+        XCTAssertEqual(founder?.deptIndex, 0, "Kurucu mühendislik departmanında başlamalı")
+        XCTAssertTrue(founder?.isFounder ?? false)
+        XCTAssertEqual(founder?.assignedProjectID, model.projects.first?.id,
+                       "Kurucu ilk projeye atanmış olmalı")
+    }
+
+    @MainActor
+    func testHireAddsNamedMemberAndKeepsHeadcountInSync() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Y", company: "N",
+                                   sector: 0, firstProjectName: "P", firstProjectCategory: 0)
+        XCTAssertEqual(model.totalHeadcount, 1)
+        XCTAssertEqual(model.members.count, 1)
+
+        let ok = model.hire(0)   // mühendis al
+        XCTAssertTrue(ok)
+        XCTAssertEqual(model.totalHeadcount, 2)
+        XCTAssertEqual(model.members.count, 2)
+        let newMember = model.members.last!
+        XCTAssertFalse(newMember.isFounder)
+        XCTAssertEqual(newMember.deptIndex, 0)
+        XCTAssertFalse(newMember.firstName.isEmpty, "Yeni hire isimli olmalı (anonim sayı değil)")
+    }
+
+    @MainActor
+    func testFirePreservesFounder() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Y", company: "N",
+                                   sector: 0, firstProjectName: "P", firstProjectCategory: 0)
+        // Yalnızca kurucu var. Fire başarısız OLMALI (kurucu çıkarılamaz).
+        let result = model.fire(0)
+        XCTAssertFalse(result, "Kurucu hariç fire'lanabilir üye yoksa fire başarısız olmalı")
+        XCTAssertEqual(model.totalHeadcount, 1)
+        XCTAssertNotNil(model.founderMember)
+    }
+
+    @MainActor
+    func testFireRemovesLastHireNotFounder() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Y", company: "N",
+                                   sector: 0, firstProjectName: "P", firstProjectCategory: 0)
+        _ = model.hire(0)   // ikinci mühendis
+        XCTAssertEqual(model.members.count, 2)
+        let secondHireID = model.members.last!.id
+        let founderID = model.founderMember!.id
+
+        let result = model.fire(0)
+        XCTAssertTrue(result)
+        XCTAssertEqual(model.totalHeadcount, 1)
+        XCTAssertEqual(model.members.count, 1)
+        XCTAssertNotNil(model.members.first(where: { $0.id == founderID }), "Kurucu korunmalı")
+        XCTAssertNil(model.members.first(where: { $0.id == secondHireID }), "Son hire kaldırıldı")
+    }
+
+    @MainActor
+    func testHireAutoAssignsEngineerToDevProject() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Y", company: "N",
+                                   sector: 0, firstProjectName: "MVP", firstProjectCategory: 0)
+        // Yeni geliştirme aşamasında bir proje ekle.
+        _ = model.startProject(name: "Beta", category: 0)
+        let devProject = model.projects.last!
+        XCTAssertFalse(devProject.isLive)
+
+        // Mühendis al → otomatik olarak dev project'e atanmalı.
+        _ = model.hire(0)
+        let newMember = model.members.last!
+        XCTAssertEqual(newMember.assignedProjectID, devProject.id,
+                       "Yeni mühendis geliştirme-aşamasındaki projeye atanmalı")
+        XCTAssertEqual(model.teamSize(forProject: devProject.id), 1)
+    }
+
+    @MainActor
+    func testHireMarketingDoesNotAssignToProject() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Y", company: "N",
+                                   sector: 0, firstProjectName: "MVP", firstProjectCategory: 0)
+        _ = model.startProject(name: "Beta", category: 0)
+        // Pazarlama al (id=2): proje atanmamalı.
+        _ = model.hire(2)
+        let marketer = model.members.last!
+        XCTAssertEqual(marketer.deptIndex, 2)
+        XCTAssertNil(marketer.assignedProjectID,
+                     "Pazarlama üyesi proje-bağımsız (atama olmamalı)")
+    }
+
+    @MainActor
+    func testNormalizeSyncsMembersToHeadcount() {
+        var state = GameState()
+        state.headcount[0] = 3   // 3 mühendis istiyoruz ama members boş
+        state.normalize()
+        XCTAssertEqual(state.members.filter { $0.deptIndex == 0 }.count, 3,
+                       "Eksik üye sayısı isimli generic'lerle dolmalı")
+        XCTAssertEqual(state.headcount[0], 3)
+    }
+
+    @MainActor
+    func testRestartAfterBankruptcyKeepsFounderIdentity() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Yılmaz",
+                                   company: "Nova", sector: 0,
+                                   firstProjectName: "Atlas", firstProjectCategory: 0)
+        _ = model.hire(0); _ = model.hire(2)
+        XCTAssertEqual(model.members.count, 3)
+
+        model.restartAfterBankruptcy()
+
+        XCTAssertEqual(model.members.count, 1, "Yeniden başlangıçta sadece kurucu döner")
+        XCTAssertEqual(model.founderMember?.firstName, "Ada")
+        XCTAssertEqual(model.founderMember?.lastName, "Yılmaz")
+        XCTAssertTrue(model.founderMember?.isFounder ?? false)
+        XCTAssertEqual(model.founderMember?.assignedProjectID, model.projects.first?.id,
+                       "Kurucu yeni ilk projeye atanmış olmalı")
+    }
+}
+

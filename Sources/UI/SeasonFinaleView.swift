@@ -42,8 +42,8 @@ struct SeasonFinaleView: View {
                 .frame(maxWidth: 360)
                 .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
                 .overlay(RoundedRectangle(cornerRadius: Radius.overlay)
-                    .stroke(Palette.gold.opacity(0.35), lineWidth: 1))
-                .shadow(color: Palette.gold.opacity(0.15), radius: 18, y: 8)
+                    .stroke(theme.hairline, lineWidth: 1))
+                .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
                 .padding(.horizontal, Space.s5)
                 .padding(.vertical, Space.s5)
                 .scaleEffect(appeared ? 1 : 0.8).opacity(appeared ? 1 : 0)
@@ -55,27 +55,25 @@ struct SeasonFinaleView: View {
         }
     }
 
-    // MARK: Hero — kazanılan ünvan rozeti + çift parıltı halkası (görkem).
+    // MARK: Hero — tek sade hero ışıltı (kontrollü kutlama, neon halo YOK).
     private var hero: some View {
         ZStack {
             if appeared {
-                SeasonGlowRing(color: Palette.gold, size: 110)
-                SeasonGlowRing(color: titleColor, size: 92)
+                SeasonGlowRing(color: Palette.gold, size: 100)
             }
             ZStack {
                 Circle()
-                    .fill(titleColor.opacity(0.16))
-                    .frame(width: 104, height: 104)
-                    .overlay(Circle().stroke(titleColor.opacity(0.7), lineWidth: 2))
-                    .shadow(color: titleColor.opacity(0.3), radius: 10)
+                    .fill(titleColor.opacity(0.14))
+                    .frame(width: 100, height: 100)
+                    .overlay(Circle().stroke(titleColor.opacity(0.45), lineWidth: 1.5))
                 Image(systemName: finale.title.icon)
-                    .font(.system(size: 44, weight: .bold))
+                    .font(.system(size: 42, weight: .bold))
                     .foregroundStyle(titleColor)
                     .symbolEffect(.bounce, value: appeared)
             }
             .scaleEffect(appeared ? 1 : 0.5)
         }
-        .frame(height: 120)
+        .frame(height: 116)
     }
 
     // MARK: Ünvan kartı — kazanılan kalıcı ünvan + koleksiyon sayacı.
@@ -161,19 +159,19 @@ struct SeasonFinaleView: View {
     private func pct(_ v: Double) -> String { "%\(Int((v * 100).rounded()))" }
 }
 
-/// Genişleyip sönen kutlama parıltı halkası (sezon finali — görkemli, boyutlanabilir).
+/// Sade hero ışıltı (sezon finali — kontrollü kutlama, neon halo YOK).
 private struct SeasonGlowRing: View {
     let color: Color
     var size: CGFloat = 96
     @State private var animate = false
     var body: some View {
         Circle()
-            .stroke(color, lineWidth: 3)
+            .stroke(color.opacity(0.55), lineWidth: 1.5)
             .frame(width: size, height: size)
-            .scaleEffect(animate ? 2.4 : 0.4)
-            .opacity(animate ? 0 : 1)
+            .scaleEffect(animate ? 1.6 : 0.7)
+            .opacity(animate ? 0 : 0.85)
             .onAppear {
-                withAnimation(.easeOut(duration: 1.4).repeatCount(2, autoreverses: false)) {
+                withAnimation(.easeOut(duration: 1.2)) {
                     animate = true
                 }
             }

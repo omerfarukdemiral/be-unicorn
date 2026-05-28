@@ -1,14 +1,13 @@
 import SwiftUI
 
-/// Üst HUD — BitLife / Idle Tycoon tarzı tek BÜYÜK ŞİŞKİN "bubble bar".
+/// Üst HUD — sleek dark premium, Aurora rafine.
 ///
-/// Tasarım:
-/// - Tek geniş RoundedRectangle (chunky panel) — kalın stroke + dış drop shadow + üst light highlight.
-/// - 3 grup yatayda:
-///   • LEFT: dairesel kurucu avatarı (+ kron + lig sıralaması rozeti) + nakit pill + altında net "+$X/ay" pill.
-///   • CENTER: moral pill + kullanıcı pill (kritikse kırmızı uyarı noktası).
-///   • RIGHT: ⏸/▶/⏩ zaman kontrol pill'i + takvim chip + dişli (ses).
-/// - Tüm pill'ler chunky padding, thick stroke, soft shadow, numericText sayı animasyonu.
+/// Tasarım dili:
+/// - Tek temiz katmanlı surfaceLow zemin (chunky bubble bar YOK, çift gradient + accent halo YOK).
+/// - Üst satır SOL: avatar + eyebrow + nakit kahraman + net/ay.
+///        SAĞ: kompakt zaman kontrol kapsülü + takvim chip + ses toggle.
+/// - Orta satır: ince surfaceHigh stat satırı (users · MRR · runway).
+/// - Alt satır: iki ince hairline progress bar (moral · sıradaki tur) — 4pt.
 struct HUDView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
@@ -26,269 +25,192 @@ struct HUDView: View {
     private var moraleCritical: Bool { model.morale < 30 }
     private var leagueColor: Color { Color(hex: model.currentLeague.colorHex) }
 
+    private var runwayText: String {
+        if model.netPerMonth >= 0 { return "∞" }
+        let m = model.runwayMonths
+        if m >= 99 { return "99+" }
+        if m >= 12 { return "\(Int(m.rounded()))ay" }
+        return String(format: "%.1fay", m)
+    }
+    private var runwayTint: Color {
+        if model.netPerMonth >= 0 { return Palette.success }
+        if model.runwayMonths < 3 { return Palette.danger }
+        if model.runwayMonths < 6 { return Palette.warning }
+        return Palette.textSecondary
+    }
+
     var body: some View {
-        bubblePanel
-            .overlay(
-                HStack(alignment: .center, spacing: Space.s2) {
-                    leftGroup
-                    Spacer(minLength: 4)
-                    centerGroup
-                    Spacer(minLength: 4)
-                    rightGroup
-                }
-                .padding(.horizontal, Space.s3 - 2)
-                .padding(.vertical, Space.s2 - 1)
-            )
-            .scaleEffect(cashPop)
-            .onAppear { startPulseIfNeeded() }
-            .onChange(of: negative) { _, _ in startPulseIfNeeded() }
-            .onChange(of: model.cash) { old, new in
-                if new - old > 1000 {
-                    withAnimation(Motion.snappy) { cashPop = 1.04 }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                        withAnimation(Motion.snappy) { cashPop = 1 }
-                    }
+        VStack(spacing: Space.s2 + 2) {
+            topRow
+            statsRow
+            barsRow
+        }
+        .padding(.horizontal, Space.s4)
+        .padding(.vertical, Space.s3)
+        .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.overlay)
+                .stroke(theme.hairline, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+        .scaleEffect(cashPop)
+        .onAppear { startPulseIfNeeded() }
+        .onChange(of: negative) { _, _ in startPulseIfNeeded() }
+        .onChange(of: moraleCritical) { _, _ in startPulseIfNeeded() }
+        .onChange(of: model.cash) { old, new in
+            if new - old > 1000 {
+                withAnimation(Motion.snappy) { cashPop = 1.03 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                    withAnimation(Motion.snappy) { cashPop = 1 }
                 }
             }
-            .sheet(isPresented: $showLeaderboard) {
-                LeaderboardSheet(model: model, theme: theme)
-            }
+        }
+        .sheet(isPresented: $showLeaderboard) {
+            LeaderboardSheet(model: model, theme: theme)
+        }
     }
 
-    // MARK: - Bubble bar zemini (chunky 3D pop)
+    // MARK: - Üst satır: SOL (avatar + cash) · SAĞ (kontrol)
 
-    private var bubblePanel: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        theme.surfaceElevated.opacity(0.98),
-                        theme.surface.opacity(0.96)
-                    ],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
-            .overlay(
-                // İç üst highlight — 3D pop (cam üstü ışık).
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(0.32),
-                                .white.opacity(0.04),
-                                .black.opacity(0.2)
-                            ],
-                            startPoint: .top, endPoint: .bottom
-                        ),
-                        lineWidth: 1.2
-                    )
-            )
-            .overlay(
-                // Dış chunky kontur (kartoonsu kalın çerçeve).
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(theme.accent.opacity(0.4), lineWidth: 1.8)
-            )
-            .shadow(color: .black.opacity(0.45), radius: 12, x: 0, y: 7)
-            .frame(height: 78)
+    private var topRow: some View {
+        HStack(alignment: .center, spacing: Space.s3) {
+            leftGroup
+            Spacer(minLength: Space.s2)
+            rightGroup
+        }
     }
-
-    // MARK: - LEFT: avatar + nakit + net
 
     private var leftGroup: some View {
-        HStack(spacing: Space.s2) {
+        HStack(spacing: Space.s2 + 2) {
             avatarBadge
-            VStack(alignment: .leading, spacing: 3) {
-                cashPill
-                netPill
+            VStack(alignment: .leading, spacing: 1) {
+                eyebrowRow
+                Text(BigNumber.money(model.cash))
+                    .font(.displayL)
+                    .foregroundStyle(negative ? Palette.danger : Palette.textPrimary)
+                    .contentTransition(.numericText())
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .opacity(negative && pulse ? 0.7 : 1)
+                netLine
             }
         }
     }
 
-    /// Dairesel kurucu avatarı — kron + lig sıralaması rozeti üstte/altta.
+    /// Eyebrow satırı — kurucu ilk adı (gold) + evre (accent), tek satır.
+    private var eyebrowRow: some View {
+        HStack(spacing: 4) {
+            if let founder = model.founderMember, !founder.firstName.isEmpty {
+                Text(founder.firstName.uppercased())
+                    .foregroundStyle(Palette.gold)
+                Text("·").foregroundStyle(theme.subtle)
+            }
+            Text(model.currentStage.name.uppercased())
+                .foregroundStyle(theme.accent)
+        }
+        .font(.eyebrow).kerning(0.8)
+        .lineLimit(1)
+        .fixedSize(horizontal: false, vertical: false)
+    }
+
+    /// Küçük dairesel avatar — 30pt, sade 1pt hairline halka, tap → leaderboard.
     private var avatarBadge: some View {
         Button { Haptics.tap(); showLeaderboard = true } label: {
             ZStack {
-                // Dış halka (chunky stroke + glow).
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                leagueColor.opacity(0.95),
-                                leagueColor.opacity(0.6)
-                            ],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 50, height: 50)
-                    .overlay(Circle().stroke(.white.opacity(0.45), lineWidth: 2))
-                    .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
-                // İç avatar (kurucu glyph).
+                    .fill(theme.surfaceHigh)
+                    .frame(width: 32, height: 32)
+                    .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
+                Image(systemName: Icons.Screen.founder)
+                    .font(.system(size: 17, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Palette.textPrimary)
+                // Sağ-alt: lig tier rozeti — küçük accent dolgulu daire.
                 Circle()
-                    .fill(theme.surfaceElevated)
-                    .frame(width: 40, height: 40)
+                    .fill(leagueColor)
+                    .frame(width: 13, height: 13)
                     .overlay(
-                        Image(systemName: Icons.Screen.founder)
-                            .font(.system(size: 22, weight: .bold))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.white.opacity(0.92))
+                        Text("\(model.leagueTier + 1)")
+                            .font(.appNumber(8, .heavy))
+                            .foregroundStyle(.black.opacity(0.85))
                     )
-                    .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 1))
-
-                // Üstte kron rozeti.
-                VStack {
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 11, weight: .black))
-                        .foregroundStyle(Palette.gold)
-                        .offset(y: -3)
-                    Spacer()
-                }
-                .frame(width: 50, height: 50)
-
-                // Sağ-alt: lig tier rozeti (küçük altın badge — 1..6).
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        ZStack {
-                            Circle().fill(Palette.gold)
-                                .frame(width: 19, height: 19)
-                                .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1.4))
-                                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
-                            Text("\(model.leagueTier + 1)")
-                                .font(.appNumber(11, .black))
-                                .foregroundStyle(.black.opacity(0.82))
-                        }
-                        .offset(x: 4, y: 4)
-                    }
-                }
-                .frame(width: 50, height: 50)
+                    .overlay(Circle().stroke(theme.surfaceLow, lineWidth: 1.2))
+                    .offset(x: 11, y: 11)
             }
+            .frame(width: 32, height: 32)
         }
         .buttonStyle(.pressable)
         .accessibilityLabel("Kurucu, \(model.currentLeague.name)")
     }
 
-    /// Nakit pill — chunky "$" daire + büyük rakam.
-    private var cashPill: some View {
-        HStack(spacing: 5) {
-            ZStack {
-                Circle()
-                    .fill(negative ? Palette.danger : Palette.success)
-                    .frame(width: 22, height: 22)
-                    .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 1.2))
-                Image(systemName: negative ? "exclamationmark" : "dollarsign")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(.white)
-            }
-            Text(BigNumber.money(model.cash))
-                .font(.appNumber(15, .heavy))
-                .foregroundStyle(.white)
-                .contentTransition(.numericText())
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .fixedSize(horizontal: true, vertical: false)
-        }
-        .padding(.leading, 4).padding(.trailing, Space.s2).padding(.vertical, 3)
-        .background(Capsule().fill(theme.surfaceHigh))
-        .overlay(
-            Capsule().stroke(negative ? Palette.danger.opacity(0.55) : .white.opacity(0.18),
-                             lineWidth: 1.4)
-        )
-        // Negatif nakit: yumuşatılmış kırmızı nabız (eskisinden ~40% düşük yoğunluk).
-        .shadow(color: negative ? Palette.danger.opacity(pulse ? 0.3 : 0.1) : .black.opacity(0.3),
-                radius: negative && pulse ? 11 : 4, y: 2)
-    }
-
-    /// Altta küçük net "+$X/ay" pill (pozitifse yeşil, negatifse kırmızı).
-    private var netPill: some View {
+    /// Net/ay — küçük renkli etiket.
+    private var netLine: some View {
         let positive = net >= 0
         let color: Color = positive ? Palette.success : Palette.danger
         let sign = positive ? "+" : ""
         return HStack(spacing: 3) {
             Image(systemName: positive ? "arrow.up.right" : "arrow.down.right")
-                .font(.system(size: 9, weight: .black))
-                .foregroundStyle(.white)
+                .font(.system(size: 8.5, weight: .bold))
             Text("\(sign)\(BigNumber.money(net))/ay")
-                .font(.appNumber(9.5, .heavy))
-                .foregroundStyle(.white)
+                .font(.appNumber(10.5, .bold))
                 .contentTransition(.numericText())
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, Space.s2).padding(.vertical, 2.5)
-        .background(Capsule().fill(color))
-        .overlay(Capsule().stroke(.white.opacity(0.45), lineWidth: 1.1))
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+        .foregroundStyle(color)
+        .lineLimit(1)
     }
 
-    // MARK: - CENTER: moral + kullanıcı
+    // MARK: - Orta satır: ince stat row (users · MRR · runway)
 
-    private var centerGroup: some View {
-        VStack(spacing: 4) {
-            moralePill
-            usersPill
+    private var statsRow: some View {
+        HStack(spacing: 0) {
+            statCell(label: "Kullanıcı", value: BigNumber.format(model.users), tint: Palette.textPrimary)
+            divider
+            statCell(label: "MRR", value: BigNumber.money(model.mrr), tint: Palette.textPrimary)
+            divider
+            statCell(label: "Runway", value: runwayText, tint: runwayTint)
         }
+        .padding(.horizontal, Space.s2)
+        .padding(.vertical, Space.s2 - 2)
+        .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.s))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.s)
+                .stroke(theme.hairline, lineWidth: 1)
+        )
     }
 
-    private var moralePill: some View {
-        HStack(spacing: 3) {
-            Image(systemName: moraleCritical ? "face.dashed.fill" : "face.smiling.fill")
-                .font(.system(size: 13, weight: .black))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(moraleColor)
-            Text("\(Int(model.morale))")
-                .font(.appNumber(13, .heavy))
-                .foregroundStyle(.white)
+    private func statCell(label: String, value: String, tint: Color) -> some View {
+        VStack(spacing: 0) {
+            Text(value)
+                .font(.numberL)
+                .foregroundStyle(tint)
                 .contentTransition(.numericText())
-                .lineLimit(1)
+                .lineLimit(1).minimumScaleFactor(0.55)
+            Text(label)
+                .font(.appText(9.5, .medium))
+                .kerning(0.4)
+                .foregroundStyle(Palette.textTertiary)
+                .lineLimit(1).minimumScaleFactor(0.8)
         }
-        .padding(.horizontal, Space.s2).padding(.vertical, 3)
-        .background(Capsule().fill(theme.surfaceHigh))
-        .overlay(Capsule().stroke(moraleColor.opacity(0.5), lineWidth: 1.3))
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
-        .overlay(alignment: .topTrailing) {
-            if moraleCritical {
-                Circle().fill(Palette.danger)
-                    .frame(width: 8, height: 8)
-                    .overlay(Circle().stroke(.white, lineWidth: 1))
-                    .offset(x: 2, y: -2)
-                    .opacity(pulse ? 1 : 0.5)
-            }
-        }
+        .frame(maxWidth: .infinity)
     }
 
-    private var usersPill: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "person.2.fill")
-                .font(.system(size: 11, weight: .black))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(theme.accent)
-            Text(BigNumber.format(model.users))
-                .font(.appNumber(11, .heavy))
-                .foregroundStyle(.white)
-                .contentTransition(.numericText())
-                .lineLimit(1)
-        }
-        .padding(.horizontal, Space.s2).padding(.vertical, 2.5)
-        .background(Capsule().fill(theme.surfaceHigh))
-        .overlay(Capsule().stroke(theme.accent.opacity(0.45), lineWidth: 1.1))
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+    private var divider: some View {
+        Rectangle()
+            .fill(theme.hairline)
+            .frame(width: 1, height: 22)
     }
 
-    // MARK: - RIGHT: zaman + takvim + dişli
+    // MARK: - SAĞ: zaman kontrol + takvim + ses (alt alta)
 
     private var rightGroup: some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        VStack(alignment: .trailing, spacing: Space.s1 + 2) {
             timeControlPill
-            HStack(spacing: 3) {
+            HStack(spacing: 5) {
                 calendarChip
                 gearButton
             }
         }
     }
 
-    /// ⏸ ▶ ⏩ tek pill içinde — aktif duruma göre dolgu.
     private var timeControlPill: some View {
         HStack(spacing: 0) {
             timeButton(
@@ -296,7 +218,9 @@ struct HUDView: View {
                 active: model.isPaused,
                 tint: Palette.warning
             ) { Haptics.selection(); model.togglePause() }
-            Capsule().fill(.white.opacity(0.08)).frame(width: 1, height: 14)
+            Rectangle()
+                .fill(theme.hairline)
+                .frame(width: 1, height: 14)
             timeButton(
                 systemName: "forward.fill",
                 label: "\(Int(model.speed))×",
@@ -305,9 +229,8 @@ struct HUDView: View {
             ) { Haptics.selection(); model.cycleSpeed() }
         }
         .padding(2)
-        .background(Capsule().fill(theme.surfaceHigh))
-        .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1.1))
-        .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+        .background(theme.surfaceHigh, in: Capsule())
+        .overlay(Capsule().stroke(theme.hairline, lineWidth: 1))
     }
 
     private func timeButton(systemName: String, label: String? = nil, active: Bool, tint: Color,
@@ -315,63 +238,101 @@ struct HUDView: View {
         Button(action: action) {
             HStack(spacing: 3) {
                 Image(systemName: systemName)
-                    .font(.system(size: 10.5, weight: .black))
-                    .foregroundStyle(active ? .white : tint.opacity(0.85))
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(active ? .white : Palette.textSecondary)
                 if let label {
                     Text(label).font(.appNumber(10.5, .heavy))
-                        .foregroundStyle(active ? .white : tint.opacity(0.85))
+                        .foregroundStyle(active ? .white : Palette.textSecondary)
                 }
             }
-            .padding(.horizontal, Space.s2 - 2).padding(.vertical, 4)
+            .padding(.horizontal, Space.s2).padding(.vertical, 5)
             .background(
-                Capsule()
-                    .fill(active ? tint : .clear)
+                Capsule().fill(active ? tint.opacity(0.92) : .clear)
             )
         }
         .buttonStyle(.pressable)
     }
 
-    /// Takvim chip — "Ç{N}·S{N}" (mevcut çeyrek ve sezon kompakt).
     private var calendarChip: some View {
         HStack(spacing: 3) {
             Image(systemName: "calendar")
-                .font(.system(size: 10, weight: .black))
-                .foregroundStyle(Palette.gold)
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(Palette.textTertiary)
             Text("Ç\(model.quarterNumber)·S\(model.seasonNumber)")
-                .font(.appNumber(10, .heavy))
-                .foregroundStyle(.white)
+                .font(.appNumber(10, .bold))
+                .foregroundStyle(Palette.textSecondary)
         }
-        .padding(.horizontal, Space.s2 - 2).padding(.vertical, 3.5)
-        .background(Capsule().fill(theme.surfaceHigh))
-        .overlay(Capsule().stroke(Palette.gold.opacity(0.45), lineWidth: 1.1))
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+        .padding(.horizontal, Space.s2).padding(.vertical, 4)
+        .background(theme.surfaceHigh, in: Capsule())
+        .overlay(Capsule().stroke(theme.hairline, lineWidth: 1))
     }
 
-    /// Dişli — ses aç/kapa toggle (sağda kompakt).
     private var gearButton: some View {
         Button {
             soundEnabled = AudioManager.shared.toggle()
             Haptics.selection()
         } label: {
             Image(systemName: soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                .font(.system(size: 11, weight: .black))
+                .font(.system(size: 10.5, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(soundEnabled ? theme.accent : Palette.textTertiary)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(theme.surfaceHigh))
-                .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1.1))
-                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                .foregroundStyle(soundEnabled ? Palette.textSecondary : Palette.textTertiary)
+                .frame(width: 24, height: 24)
+                .background(theme.surfaceHigh, in: Circle())
+                .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
         }
         .buttonStyle(.pressable)
         .accessibilityLabel(soundEnabled ? "Sesi kapat" : "Sesi aç")
     }
 
-    // MARK: - Pulse (negatif nakit / kritik moral uyarısı)
+    // MARK: - ALT: iki ince progress bar (moral · sıradaki tur)
 
+    private var barsRow: some View {
+        HStack(spacing: Space.s4) {
+            progressLine(label: "Moral", value: "\(Int(model.morale))",
+                         fraction: max(0, min(1, model.morale / 100)),
+                         tint: moraleColor, critical: moraleCritical)
+            progressLine(label: nextRoundLabel, value: "\(Int(model.raiseProgress * 100))%",
+                         fraction: model.raiseProgress,
+                         tint: theme.accent, critical: false)
+        }
+    }
+
+    private var nextRoundLabel: String {
+        if let next = model.nextStage { return next.name }
+        return "Final"
+    }
+
+    private func progressLine(label: String, value: String, fraction: Double,
+                              tint: Color, critical: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Space.s2) {
+                Text(label)
+                    .font(.labelText)
+                    .foregroundStyle(Palette.textTertiary)
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                Text(value)
+                    .font(.numberS)
+                    .foregroundStyle(critical ? Palette.danger : Palette.textSecondary)
+                    .contentTransition(.numericText())
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(theme.hairline)
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: max(2, geo.size.width * fraction))
+                }
+            }
+            .frame(height: 4)
+        }
+    }
+
+    // MARK: - Pulse (negatif nakit / kritik moral)
     private func startPulseIfNeeded() {
         let needsPulse = negative || moraleCritical
         if needsPulse {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
                 pulse = true
             }
         } else {

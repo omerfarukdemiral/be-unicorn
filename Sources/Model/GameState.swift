@@ -15,8 +15,11 @@ struct GameState: Codable {
     // Şirketin ürün portföyü (projelerle büyüme mekaniği)
     var projects: [ProjectState] = []
 
-    // Ekip (departman jeneratörleri)
+    // Ekip (departman jeneratörleri — sayaç) + bireysel üyeler (kimlik katmanı).
+    // `headcount` ekonomi formülleri için tek doğruluk kaynağıdır; `members` üstüne
+    // ad/skill/proje atanması ekler. normalize() ikisini her zaman senkron tutar.
     var headcount: [Int]
+    var members: [TeamMember] = []
     var moduleLevels: [Int]
 
     // Ofis eşyaları (itemId → adet). Eski kayıtta yoksa boş gelir; normalize tohumlar.
@@ -191,6 +194,48 @@ struct GameState: Codable {
             fixed.devProgress = min(1, max(0, fixed.devProgress))
             if fixed.devProgress >= 1 { fixed.isLive = true }
             return fixed
+        }
+
+        // Üye listesi: geçersiz departman indekslerini kırp; var olmayan projeye
+        // atanmış üyelerin atamasını temizle; sonra headcount ile senkronla.
+        let validProjectIDs = Set(projects.map { $0.id })
+        members = members.compactMap { m in
+            guard m.deptIndex >= 0 && m.deptIndex < headcount.count else { return nil }
+            var fixed = m
+            fixed.skillLevel = min(5, max(1, fixed.skillLevel))
+            if let pid = fixed.assignedProjectID, !validProjectIDs.contains(pid) {
+                fixed.assignedProjectID = nil
+            }
+            return fixed
+        }
+        syncMembersToHeadcount()
+    }
+
+    /// `headcount` ile `members` arasını eşle: eksik departmanlara generic isimli üye ekle,
+    /// fazlalıkları (kurucu hariç en son hire'lardan başlayarak) kaldır. Kurucu üye DAİMA
+    /// korunur (oyuncu kimliği). Yeni alan: skill 1 (eski kayıt güvenli — oyun deneyimi bozulmaz).
+    mutating func syncMembersToHeadcount() {
+        for deptIdx in 0..<headcount.count {
+            let currentCount = members.reduce(0) { $0 + ($1.deptIndex == deptIdx ? 1 : 0) }
+            let target = headcount[deptIdx]
+            if currentCount < target {
+                // Eksik: generic isimli üye(ler) ekle.
+                for _ in 0..<(target - currentCount) {
+                    let n = NarrativeContent.randomFounderName()
+                    members.append(TeamMember(firstName: n.first, lastName: n.last,
+                                              deptIndex: deptIdx, skillLevel: 1,
+                                              joinedMonth: months))
+                }
+            } else if currentCount > target {
+                // Fazla: kurucuyu KORUYARAK en son eklenenden başla.
+                var toRemove = currentCount - target
+                for i in (0..<members.count).reversed() where toRemove > 0 {
+                    if members[i].deptIndex == deptIdx && !members[i].isFounder {
+                        members.remove(at: i)
+                        toRemove -= 1
+                    }
+                }
+            }
         }
     }
 

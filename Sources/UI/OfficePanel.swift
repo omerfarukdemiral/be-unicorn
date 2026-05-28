@@ -1,13 +1,12 @@
 import SwiftUI
 
-/// Ana ofis ekranı — "sahne + floating aksiyonlar" hissi.
+/// Ana ofis ekranı — sleek Aurora.
 ///
 /// Düzen:
-/// - Kroki (FloorPlanView) merkez sahne; HUD'un altında, iki yan floating nav arası.
-/// - Sprint + Günlük Hedef: krokinin alt köşelerinde yüzen chunky mini-rozet halkalar
-///   (tap → mevcut detay sheet'leri). Eski "GoalsStrip" satırı kaldırıldı → dağınıklık gitti.
-/// - Mağaza: krokinin altında büyük floating round action button.
-/// - "Tur Topla": uygunsa krokinin altında parıltılı action button (mağaza yanında).
+/// - (üstte) Eğer canRaise ise: yatay sade "Tur Topla" success-tint pill (sade, glow yok).
+/// - Kroki (FloorPlanView) hero — dikey ~60% yer kaplar (içerideki canvas yüksekliğini büyüttük).
+/// - Alt action strip: Sprint mini-card · Günlük mini-card · Mağaza primary CTA.
+///   Halka/glow chip YOK — sade pill kartlar şeridi.
 struct OfficePanel: View {
     @ObservedObject var model: GameModel
     var theme: Theme
@@ -15,38 +14,19 @@ struct OfficePanel: View {
     @State private var expanded: GoalsStrip.Detail? = nil
 
     var body: some View {
-        ZStack(alignment: .center) {
-            // Kroki sahnesi — scroll'suz, hero. Yan kümeler için içerik dış marjini ContentView veriyor.
-            VStack(spacing: Space.s3) {
-                FloorPlanView(model: model, theme: theme)
-                    .padding(.top, Space.s1)
-
-                // Sprint + Günlük yüzen mini halkalar — krokinin hemen altında, ortaya yakın.
-                HStack(spacing: Space.s4) {
-                    sprintRing
-                    Spacer()
-                    dailyRing
-                }
-                .padding(.horizontal, Space.s2)
-
-                Spacer(minLength: 0)
+        VStack(spacing: Space.s3) {
+            if model.canRaise, let next = model.nextStage {
+                raiseStrip(next)
             }
-            .padding(.horizontal, Space.s2)
 
-            // Alt floating aksiyonlar: Mağaza (her zaman) + Tur Topla (canRaise olursa).
-            VStack {
-                Spacer()
-                HStack(alignment: .bottom, spacing: Space.s2) {
-                    if model.canRaise, let next = model.nextStage {
-                        raiseAction(next)
-                    }
-                    Spacer()
-                    shopAction
-                }
-                .padding(.horizontal, Space.s2)
-                .padding(.bottom, Space.s3)
-            }
+            // Hero: kroki sahnesi (büyük).
+            FloorPlanView(model: model, theme: theme)
+                .frame(maxHeight: .infinity)
+
+            // Alt action strip — Sprint · Günlük · Mağaza
+            actionStrip
         }
+        .padding(.vertical, Space.s2)
         .sheet(isPresented: $showShop) {
             ItemShopView(model: model, theme: theme)
         }
@@ -57,190 +37,142 @@ struct OfficePanel: View {
         }
     }
 
-    // MARK: - Sprint / Daily yüzen mini halka rozetler
+    // MARK: - Raise strip (canRaise ise, HUD altında sade)
 
-    private var sprintRing: some View {
-        let p = model.sprintProgress.fraction
-        let onTrack = model.sprintOnTrack
-        return floatingRing(
-            icon: "bolt.fill",
-            tint: onTrack ? Palette.success : theme.accent,
-            fraction: p,
-            badgeIcon: "checkmark.seal.fill",
-            badgeValue: model.sprintsWonThisQuarter,
-            badgeColor: Palette.success,
-            label: "Sprint"
-        ) { Haptics.tap(); expanded = .sprint }
-    }
-
-    private var dailyRing: some View {
-        let c = model.dailyTaskCounts
-        let frac = c.total > 0 ? Double(c.done) / Double(c.total) : 0
-        let allDone = model.dailyCompleted
-        return floatingRing(
-            icon: "target",
-            tint: allDone ? Palette.success : theme.accent,
-            fraction: allDone ? 1 : frac,
-            badgeIcon: "flame.fill",
-            badgeValue: model.streak,
-            badgeColor: Palette.warning,
-            label: "Günlük"
-        ) { Haptics.tap(); expanded = .daily }
-    }
-
-    /// Chunky daire — dolgu halkalı progress + ortada ikon + sağ-üst köşe rozet (streak/win).
-    private func floatingRing(icon: String, tint: Color, fraction: Double,
-                              badgeIcon: String, badgeValue: Int, badgeColor: Color,
-                              label: String,
-                              action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                ZStack {
-                    // Zemin daire (chunky).
-                    Circle()
-                        .fill(theme.surfaceElevated)
-                        .frame(width: 44, height: 44)
-                        .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1.3))
-                        .shadow(color: .black.opacity(0.4), radius: 5, y: 3)
-
-                    // İlerleme halkası.
-                    Circle()
-                        .stroke(tint.opacity(0.2), lineWidth: 3)
-                        .frame(width: 40, height: 40)
-                    Circle()
-                        .trim(from: 0, to: max(0.001, min(1, fraction)))
-                        .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .frame(width: 40, height: 40)
-                        .rotationEffect(.degrees(-90))
-
-                    // Orta ikon.
-                    Image(systemName: icon)
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(tint)
-
-                    // Sağ-üst köşe streak/win rozeti.
-                    if badgeValue > 0 {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                ZStack {
-                                    Circle().fill(badgeColor)
-                                        .frame(width: 18, height: 18)
-                                        .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1.2))
-                                        .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
-                                    HStack(spacing: 1) {
-                                        Image(systemName: badgeIcon)
-                                            .font(.system(size: 7, weight: .black))
-                                            .foregroundStyle(.white)
-                                        Text("\(badgeValue)")
-                                            .font(.appNumber(8, .heavy))
-                                            .foregroundStyle(.white)
-                                    }
-                                }
-                                .offset(x: 3, y: -3)
-                            }
-                            Spacer()
-                        }
-                        .frame(width: 44, height: 44)
-                    }
-                }
-                Text(label.uppercased())
-                    .font(.appText(9, .black))
-                    .kerning(0.5)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.trailing, 4)
-            }
-            .padding(.horizontal, 6).padding(.vertical, 3)
-            .background(Capsule().fill(theme.surfaceElevated.opacity(0.7)))
-            .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 1.1))
-            .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
-        }
-        .buttonStyle(.pressable)
-    }
-
-    // MARK: - Floating aksiyon butonları
-
-    /// Mağaza — chunky büyük yuvarlak action button + altında MAĞAZA chip.
-    private var shopAction: some View {
-        Button { Haptics.tap(); showShop = true } label: {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [theme.accent, theme.accent.opacity(0.78)],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
-                        .frame(width: 60, height: 60)
-                        .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 2))
-                        .shadow(color: .black.opacity(0.35), radius: 6, y: 3)
-                    Image(systemName: "cart.fill")
-                        .font(.system(size: 23, weight: .black))
-                        .foregroundStyle(.white)
-                }
-                .overlay(alignment: .topTrailing) {
-                    // Boş alan göstergesi rozeti.
-                    Text("\(Int(model.freeAreaM2))m²")
-                        .font(.appNumber(9, .heavy))
-                        .foregroundStyle(.black.opacity(0.85))
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(Capsule().fill(Palette.gold))
-                        .overlay(Capsule().stroke(.white.opacity(0.6), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-                        .offset(x: 6, y: -4)
-                }
-                Text("MAĞAZA")
-                    .font(.appText(8, .black))
-                    .kerning(0.6)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Capsule().fill(theme.accent))
-                    .overlay(Capsule().stroke(.white.opacity(0.5), lineWidth: 1))
-            }
-        }
-        .buttonStyle(.pressable)
-        .accessibilityLabel("Mağaza")
-    }
-
-    /// Tur topla — parıltılı yeşil chunky action button (yalnız uygunsa).
-    private func raiseAction(_ next: StageDef) -> some View {
+    private func raiseStrip(_ next: StageDef) -> some View {
         Button { Haptics.medium(); model.raiseRound() } label: {
             HStack(spacing: Space.s2) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Palette.success, Palette.successDim],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
-                        .frame(width: 44, height: 44)
-                        .overlay(Circle().stroke(.white.opacity(0.55), lineWidth: 1.8))
-                        .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
-                    Image(systemName: Icons.Screen.raise)
-                        .font(.system(size: 20, weight: .black))
-                        .foregroundStyle(.white)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("\(next.name) Topla")
-                        .font(.appText(12, .black))
-                        .foregroundStyle(.white)
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                    Text("+\(BigNumber.money(next.raiseAmount))")
-                        .font(.appNumber(11, .heavy))
-                        .foregroundStyle(Palette.gold)
-                }
-                .padding(.trailing, Space.s2)
+                Image(systemName: Icons.Screen.raise)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                Text("\(next.name) Topla")
+                    .font(.bodyL)
+                    .foregroundStyle(.white)
+                Spacer(minLength: 0)
+                Text("+\(BigNumber.money(next.raiseAmount))")
+                    .font(.numberM)
+                    .foregroundStyle(.white.opacity(0.92))
             }
-            .padding(.leading, 4).padding(.vertical, 4)
-            .background(Capsule().fill(theme.surfaceElevated.opacity(0.95)))
-            .overlay(Capsule().stroke(Palette.success.opacity(0.55), lineWidth: 1.6))
-            .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
+            .padding(.horizontal, Space.s3).padding(.vertical, Space.s2 + 2)
+            .background(Palette.success, in: RoundedRectangle(cornerRadius: Radius.m))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.m)
+                    .stroke(.white.opacity(0.18), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
         }
         .buttonStyle(.pressable)
         .accessibilityLabel("\(next.name) turunu topla")
+    }
+
+    // MARK: - Alt action strip (Sprint+Daily yan yana, altında full Mağaza CTA)
+
+    private var actionStrip: some View {
+        VStack(spacing: Space.s2) {
+            HStack(spacing: Space.s2) {
+                sprintMini
+                dailyMini
+            }
+            shopButton
+        }
+    }
+
+    private var sprintMini: some View {
+        let p = model.sprintProgress.fraction
+        let onTrack = model.sprintOnTrack
+        return miniCard(
+            icon: "bolt.fill",
+            title: "Sprint",
+            badge: model.sprintsWonThisQuarter > 0
+                ? "\(model.sprintsWonThisQuarter)" : "—",
+            fraction: p,
+            fill: onTrack ? Palette.success : theme.accent,
+            highlighted: onTrack
+        ) { Haptics.tap(); expanded = .sprint }
+    }
+
+    private var dailyMini: some View {
+        let c = model.dailyTaskCounts
+        let frac = c.total > 0 ? Double(c.done) / Double(c.total) : 0
+        let allDone = model.dailyCompleted
+        return miniCard(
+            icon: "target",
+            title: "Günlük",
+            badge: model.streak > 0 ? "🔥\(model.streak)" : "\(c.done)/\(c.total)",
+            fraction: allDone ? 1 : frac,
+            fill: allDone ? Palette.success : theme.accent,
+            highlighted: allDone
+        ) { Haptics.tap(); expanded = .daily }
+    }
+
+    /// Sade mini kart: ikon + ad + sağda küçük badge + altında ince accent fill bar.
+    private func miniCard(icon: String, title: String, badge: String,
+                          fraction: Double, fill: Color, highlighted: Bool,
+                          action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: Space.s1 + 2) {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(fill)
+                    Text(title)
+                        .font(.appText(12, .heavy))
+                        .foregroundStyle(theme.text)
+                    Spacer(minLength: 0)
+                    Text(badge)
+                        .font(.numberS)
+                        .foregroundStyle(Palette.textSecondary)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(theme.hairline)
+                        Capsule()
+                            .fill(fill)
+                            .frame(width: max(3, geo.size.width * min(1, max(0, fraction))))
+                    }
+                }
+                .frame(height: 4)
+            }
+            .padding(.horizontal, Space.s3).padding(.vertical, Space.s2 + 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.m))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.m)
+                    .stroke(highlighted ? theme.hairlineStrong : theme.hairline,
+                            lineWidth: highlighted ? 1.4 : 1)
+            )
+        }
+        .buttonStyle(.pressable)
+    }
+
+    /// Mağaza CTA — primary AppButton stilinde tam kart, sağda m² sade chip.
+    private var shopButton: some View {
+        Button { Haptics.tap(); showShop = true } label: {
+            HStack(spacing: Space.s2) {
+                Image(systemName: "cart.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                Text("Mağaza")
+                    .font(.bodyL)
+                    .foregroundStyle(.white)
+                Spacer(minLength: 0)
+                Text("\(Int(model.freeAreaM2))m²")
+                    .font(.numberS)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, Space.s1 + 2).padding(.vertical, 2)
+                    .background(.white.opacity(0.16), in: Capsule())
+            }
+            .padding(.horizontal, Space.s3).padding(.vertical, Space.s2 + 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.accent, in: RoundedRectangle(cornerRadius: Radius.m))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.m)
+                    .stroke(.white.opacity(0.14), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("Mağaza")
     }
 }

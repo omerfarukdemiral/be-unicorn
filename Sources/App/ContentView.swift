@@ -13,7 +13,7 @@ enum GameTab: CaseIterable {
         case .stats:    return "İstatistik"
         }
     }
-    /// SF Symbol adını döndürür (emoji yerine).
+    /// SF Symbol adını döndürür.
     var symbolName: String {
         switch self {
         case .office:   return Icons.Tab.office
@@ -31,7 +31,6 @@ struct ContentView: View {
     @StateObject private var model: GameModel
     @State private var tab: GameTab = {
         // İlk tab — opsiyonel launch argümanıyla override edilebilir (test/QA).
-        // `--start-tab team|growth|stats|modules|roadmap|projects|office`.
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "--start-tab"), i + 1 < args.count {
             switch args[i + 1] {
@@ -49,25 +48,24 @@ struct ContentView: View {
     @State private var topToast: TopToast? = nil
     @State private var toastToken = 0
     @State private var soundEnabled = AudioManager.shared.isEnabled
-    @State private var introAppeared = false   // başlangıç animasyonu (oyun-girişi efekti)
+    @State private var introAppeared = false
+    @State private var lessonsOpen = false
     @Environment(\.scenePhase) private var scenePhase
 
-    /// Ekranın üstünde yüzen kısa mesaj (kurucu ipucu + olay bildirimleri).
+    /// Ekranın üstünde yüzen kısa mesaj.
     struct TopToast {
         let text: String
         let urgent: Bool
         let token: Int
     }
 
-    /// İki yandaki floating nav kümeleri için panellerin rezerve edeceği yatay padding.
-    /// Sol küme ~56pt + sağ küme ~56pt — paneller bu kadar yatay padding'le kümelerin
-    /// altına girmez (içerikler iki taraftan da nefes alır).
-    private static let floatingNavReserve: CGFloat = 68
+    /// Sağ kenarda yüzen rail (tek küme) için panellerin rezerve edeceği yatay padding.
+    /// Rail genişliği ~52pt + dış s2+ → 70pt güvenli.
+    private static let railReserve: CGFloat = 70
 
-    /// Ana oyun döngüsü — SOL kümede.
-    private static let leftTabs: [GameTab] = [.office, .team, .growth, .projects]
-    /// Meta sekmeler — SAĞ kümede.
-    private static let rightTabs: [GameTab] = [.modules, .roadmap, .stats]
+    /// Tüm sekmeler tek rail içinde — sıra: ana döngü + meta.
+    private static let railTabs: [GameTab] =
+        [.office, .team, .projects, .growth, .modules, .roadmap, .stats]
 
     init() {
         _model = StateObject(wrappedValue: GameModel())
@@ -79,13 +77,12 @@ struct ContentView: View {
         ZStack {
             theme.bg.ignoresSafeArea()
 
-            // Ana içerik: HUD (üst bubble bar) + sekme paneli (iki yan floating nav arasında).
+            // Ana içerik: HUD + sekme paneli.
             VStack(spacing: 0) {
                 HUDView(model: model, theme: theme, soundEnabled: $soundEnabled)
                     .padding(.horizontal, Space.s3)
                     .padding(.top, Space.s2)
                     .padding(.bottom, Space.s2)
-                    // Açılış efekti: HUD yukarıdan aşağı yaylı kayar.
                     .offset(y: introAppeared ? 0 : -40)
                     .opacity(introAppeared ? 1 : 0)
                     .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.05),
@@ -103,57 +100,44 @@ struct ContentView: View {
                         case .stats:    StatsPanel(model: model, theme: theme)
                         }
                     }
-                    // Yan kümelere yer aç — paneller iki yandan da nefes alsın.
-                    .environment(\.sideMenuTrailing, Self.floatingNavReserve)
-                    .padding(.horizontal, Self.floatingNavReserve)
-                    // Tab geçişi: yumuşak fade — sert kesme yerine.
+                    // Sağdaki rail için içerik nefes alsın (yalnız sağdan).
+                    .environment(\.sideMenuTrailing, Self.railReserve)
+                    .padding(.leading, Space.s3)
+                    .padding(.trailing, Self.railReserve)
                     .id(tab)
                     .transition(.opacity.combined(with: .offset(y: 6)))
-                    // Açılış efekti: ana içerik hafif zoom-in + fade.
                     .scaleEffect(introAppeared ? 1 : 0.96)
                     .opacity(introAppeared ? 1 : 0)
                     .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(0.1),
                                value: introAppeared)
 
-                    // Sağ üstte yüzen bildirim çipi — HUD'un hemen altında, sağ kümeye girmez.
                     if let tt = topToast {
                         toastView(tt)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .padding(.top, Space.s1)
-                            .padding(.trailing, Self.floatingNavReserve + Space.s2)
+                            .padding(.trailing, Self.railReserve + Space.s2)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            // SOL yüzen küme — ana oyun döngüsü (Office/Team/Growth/Projects).
-            HStack {
-                FloatingNavCluster(theme: theme, tab: $tab,
-                                   tabs: Self.leftTabs, side: .left)
-                    .padding(.leading, Space.s2)
-                Spacer()
+            // SAĞ tek sleek rail — tüm sekmeler + Defter + ses.
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                SideRail(theme: theme,
+                         tab: $tab,
+                         tabs: Self.railTabs,
+                         onLessons: { lessonsOpen = true },
+                         soundEnabled: $soundEnabled)
             }
-            .padding(.vertical, Space.s2)
-            .offset(x: introAppeared ? 0 : -100)
-            .opacity(introAppeared ? 1 : 0)
-            .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.18),
-                       value: introAppeared)
-
-            // SAĞ yüzen küme — meta (Modules/Roadmap/Stats).
-            HStack {
-                Spacer()
-                FloatingNavCluster(theme: theme, tab: $tab,
-                                   tabs: Self.rightTabs, side: .right)
-                    .padding(.trailing, Space.s2)
-            }
+            .padding(.trailing, Space.s2 + 2)
             .padding(.vertical, Space.s2)
             .offset(x: introAppeared ? 0 : 100)
             .opacity(introAppeared ? 1 : 0)
             .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.18),
                        value: introAppeared)
 
-            // HUD nakit rozeti yakınında yüzen ±tutar çipi (kazanç/harcama geri bildirimi).
-            // Üst sol köşede; HUD'un eyebrow + cash badge satırı hizasının hemen sağı.
+            // HUD nakit yakınında yüzen ±tutar çipi.
             CashDeltaOverlay(model: model)
                 .padding(.leading, 110)
                 .padding(.top, 48)
@@ -162,28 +146,33 @@ struct ContentView: View {
 
             overlays
         }
+        .sheet(isPresented: $lessonsOpen) {
+            LessonsPanel(theme: theme, onClose: { lessonsOpen = false })
+                .presentationBackground(.clear)
+        }
         .onAppear {
-            // Açılış efekti tetiği (bir kez).
             guard !introAppeared else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { introAppeared = true }
+            // Test/QA: --open-lessons defter sheet'ini açılışta aç (otomatik screenshot için).
+            if ProcessInfo.processInfo.arguments.contains("--open-lessons") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { lessonsOpen = true }
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
                 model.refreshOnForeground()
-                AudioManager.shared.resume()   // arka plan müziğini sürdür
+                AudioManager.shared.resume()
             case .background, .inactive:
                 model.saveOnBackground()
-                AudioManager.shared.pause()    // arka planda müziği duraklat
+                AudioManager.shared.pause()
             @unknown default: break
             }
         }
-        // Kurucu ipucu her değiştiğinde üstte toast olarak yüzer.
         .onChange(of: model.founderTip) { _, new in
             let urgent = model.runwayMonths < 3
             showToast(urgent ? NarrativeContent.runwayTip(months: model.runwayMonths) : new, urgent: urgent)
         }
-        // Olay bildirimleri (istifa, karar sonucu vb.) de aynı üst toast'ta.
         .onChange(of: model.pendingToast) { _, new in
             guard let new else { return }
             showToast(new, urgent: false)
@@ -191,11 +180,9 @@ struct ContentView: View {
         }
     }
 
-    /// Üst toast'ı göster + otomatik kapanış (token ile son mesaj yönetimi).
     private func showToast(_ text: String, urgent: Bool) {
         toastToken += 1
         let t = toastToken
-        // Giriş: yukarıdan yaylı "doğma" (hafif overshoot). Çıkış: yukarı süzülüp solma.
         withAnimation(Motion.bouncy) { topToast = TopToast(text: text, urgent: urgent, token: t) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
             if topToast?.token == t { withAnimation(Motion.quick) { topToast = nil } }
@@ -218,8 +205,7 @@ struct ContentView: View {
         .frame(maxWidth: 240, alignment: .leading)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.m))
         .overlay(RoundedRectangle(cornerRadius: Radius.m).stroke(tint.opacity(0.35)))
-        .shadow(color: .black.opacity(0.3), radius: 12, y: 5)
-        // Bildirim gibi: tıklanınca kapanır.
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: Radius.m))
         .onTapGesture {
             Haptics.selection()
@@ -262,13 +248,12 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Environment: floating nav yatay rezerv (paneller okuyabilir)
+// MARK: - Environment: rail yatay rezerv (paneller okuyabilir)
 private struct SideMenuTrailingKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
 extension EnvironmentValues {
-    /// Floating nav kümeleri için panellerin bilmesi gereken yatay padding rezervi.
-    /// Eski isim korundu — paneller bu environment'tan ek iç padding hesaplıyor.
+    /// Sağ rail için panellerin bilmesi gereken yatay padding rezervi (eski isim korundu).
     var sideMenuTrailing: CGFloat {
         get { self[SideMenuTrailingKey.self] }
         set { self[SideMenuTrailingKey.self] = newValue }

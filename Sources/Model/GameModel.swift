@@ -139,6 +139,31 @@ final class GameModel: ObservableObject {
 
     func count(_ i: Int) -> Int { state.headcount[i] }
 
+    // MARK: - Ekip üyeleri (kimlik katmanı)
+
+    /// Tüm üyeler (kurucu + işe alınanlar). Sıra kalıcı: kurucu ilk, hire sırasıyla devam.
+    var members: [TeamMember] { state.members }
+    /// Bir departmandaki üyeler (UI roster için).
+    func members(in deptIndex: Int) -> [TeamMember] {
+        state.members.filter { $0.deptIndex == deptIndex }
+    }
+    /// Kurucu üyesi (her zaman vardır setup sonrası).
+    var founderMember: TeamMember? { state.members.first(where: { $0.isFounder }) }
+    /// Bir projeye atanmış üyeler (ProjectsPanel'de "X kişi çalışıyor" rozeti için).
+    func teamMembers(forProject projectID: UUID) -> [TeamMember] {
+        state.members.filter { $0.assignedProjectID == projectID }
+    }
+    /// Bir projeye atanmış üye sayısı (hızlı erişim — UI hot path).
+    func teamSize(forProject projectID: UUID) -> Int {
+        state.members.reduce(0) { $0 + ($1.assignedProjectID == projectID ? 1 : 0) }
+    }
+    /// Manuel atama: bir üyeyi belirli projeye (ya da nil ile boşa) at.
+    func assign(memberID: UUID, toProject projectID: UUID?) {
+        guard let idx = state.members.firstIndex(where: { $0.id == memberID }) else { return }
+        state.members[idx].assignedProjectID = projectID
+        save()
+    }
+
     // MARK: - Ofis alanı & eşyalar (kroki + satın alma)
 
     var ownedItems: [Int: Int] { state.ownedItems }
@@ -425,6 +450,18 @@ final class GameModel: ObservableObject {
         state.totalHires += 1
         state.dailyHires += 1                          // günlük hedef ilerlemesi
         state.morale = min(100, state.morale + 1.5)   // yeni ekip arkadaşı hevesi
+
+        // Bireysel kimlik katmanı: yeni üye rastgele isimle + skill rulosu;
+        // mühendislik/ürün ise en az atanmış geliştirme-aşamasındaki projeye otomatik atanır.
+        let name = NarrativeContent.randomFounderName()
+        var newMember = TeamMember(firstName: name.first, lastName: name.last,
+                                   deptIndex: i, skillLevel: rollSkillLevel(),
+                                   joinedMonth: state.months)
+        if (i == 0 || i == 1), let proj = projectNeedingHelp() {
+            newMember.assignedProjectID = proj.id
+        }
+        state.members.append(newMember)
+
         setTip(NarrativeContent.onHire)
         Feedback.tap()   // işe alım geri bildirimi
         checkDailyCompletion()
@@ -432,9 +469,34 @@ final class GameModel: ObservableObject {
         return true
     }
 
+    /// Yeni hire'ın beceri seviyesi rulosu (1-5). Çoğu L1-L2, nadiren L4-L5 — kozmetik.
+    /// Ekonomi formüllerini ETKİLEMEZ (skill SADECE UI rozeti içindir).
+    private func rollSkillLevel() -> Int {
+        let r = Double.random(in: 0..<1)
+        if r < 0.55 { return 1 }
+        if r < 0.85 { return 2 }
+        if r < 0.96 { return 3 }
+        if r < 0.995 { return 4 }
+        return 5
+    }
+
+    /// En az atanmış geliştirme-aşamasındaki proje (otomatik dağılım için).
+    /// Tüm projeler ya yayında ya da boşsa nil — yeni üye proje atanmaz.
+    private func projectNeedingHelp() -> ProjectState? {
+        let inDev = state.projects.filter { !$0.isLive }
+        guard !inDev.isEmpty else { return nil }
+        return inDev.min(by: { teamSize(forProject: $0.id) < teamSize(forProject: $1.id) })
+    }
+
     @discardableResult
     func fire(_ i: Int) -> Bool {
         guard state.headcount[i] > 0 else { return false }
+        // Kurucu KORUNUR: bu departmandaki son hire'lanan kurucu-olmayan üyeyi çıkar.
+        // Sadece kurucu varsa fire başarısız (oyuncu kendini çıkaramaz).
+        guard let idx = state.members.lastIndex(where: { $0.deptIndex == i && !$0.isFounder }) else {
+            return false
+        }
+        state.members.remove(at: idx)
         state.headcount[i] -= 1
         state.morale = max(0, state.morale - 6)        // işten çıkarma morali bozar
         state.reputation = max(0, state.reputation - 2)
@@ -1070,8 +1132,16 @@ final class GameModel: ObservableObject {
         if profile.setupComplete {
             let cat = firstProject?.category ?? 0
             let name = firstProject?.name ?? (profile.companyName.isEmpty ? "MVP" : profile.companyName)
-            fresh.projects = [ProjectState(name: name, category: cat,
-                                           startMonth: 0, devProgress: 1, isLive: true)]
+            let proj = ProjectState(name: name, category: cat,
+                                    startMonth: 0, devProgress: 1, isLive: true)
+            fresh.projects = [proj]
+            // Kurucu üyesi: aynı kişi, aynı yeni proje üzerinde — kimlik korunur.
+            let founderFirst = profile.founderFirstName.isEmpty ? "Kurucu" : profile.founderFirstName
+            fresh.members = [
+                TeamMember(firstName: founderFirst, lastName: profile.founderLastName,
+                           deptIndex: 0, skillLevel: 5, joinedMonth: 0,
+                           isFounder: true, assignedProjectID: proj.id)
+            ]
         }
         state = fresh
         debtMonths = 0
@@ -1207,8 +1277,28 @@ final class GameModel: ObservableObject {
 
         let catIndex = min(max(0, firstProjectCategory), Balance.projectCategories.count - 1)
         let projName = clean(firstProjectName).isEmpty ? clean(company) : clean(firstProjectName)
-        state.projects = [ProjectState(name: projName, category: catIndex,
-                                       startMonth: state.months, devProgress: 1, isLive: true)]
+        let firstProject = ProjectState(name: projName, category: catIndex,
+                                        startMonth: state.months, devProgress: 1, isLive: true)
+        state.projects = [firstProject]
+
+        // Kurucu = ilk üye: GameState init `headcount[0] = 1` ile başlar (kurucu mühendis);
+        // setup, anonim üyeyi profilden gelen adla NAMED bir `TeamMember`'a yükseltir
+        // ve ilk projeye atar. Skill 5 (kurucu — vizyoner).
+        let founderFirst = clean(firstName).isEmpty ? "Kurucu" : clean(firstName)
+        let founderMember = TeamMember(firstName: founderFirst,
+                                       lastName: clean(lastName),
+                                       deptIndex: 0, skillLevel: 5,
+                                       joinedMonth: state.months,
+                                       isFounder: true,
+                                       assignedProjectID: firstProject.id)
+        // Diğer üyeler varsa (eski/anonim) onları koru, sadece kurucuyu öne ekle.
+        state.members.removeAll { $0.isFounder }
+        // Mevcut anonim üyelerden birini kurucuyla DEĞİŞTİR (mühendislik dept'inden).
+        if let anonIdx = state.members.firstIndex(where: { $0.deptIndex == 0 }) {
+            state.members.remove(at: anonIdx)
+        }
+        state.members.insert(founderMember, at: 0)
+        state.normalize()   // headcount ile yeniden senkronla (her ihtimale karşı)
         save()
     }
 

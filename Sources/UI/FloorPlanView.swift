@@ -77,7 +77,7 @@ struct FloorPlanView: View {
                     GridBackground(spacing: 22)
                         .stroke(theme.hairline, lineWidth: 0.5)
                     RoundedRectangle(cornerRadius: Radius.m)
-                        .stroke(theme.accent.opacity(0.5), lineWidth: 1.5)
+                        .stroke(theme.hairline, lineWidth: 1)
 
                     if cells.isEmpty {
                         emptyHint
@@ -97,7 +97,7 @@ struct FloorPlanView: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Radius.m))
             }
-            .frame(height: 200)
+            .frame(maxHeight: .infinity)
             .animation(Motion.snappy, value: cells.count)
 
             // Doluluk bar'ı.
@@ -128,14 +128,13 @@ struct FloorPlanView: View {
         VStack(alignment: .leading, spacing: 4) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(theme.surfaceHigh)
+                    Capsule().fill(theme.hairline)
                     Capsule()
-                        .fill(LinearGradient(colors: [theme.accent.opacity(0.7), theme.accent],
-                                             startPoint: .leading, endPoint: .trailing))
+                        .fill(theme.accent)
                         .frame(width: geo.size.width * CGFloat(usage))
                 }
             }
-            .frame(height: 6)
+            .frame(height: 4)
             Text("Alan doluluğu %\(Int(usage * 100))")
                 .font(.numberXS)
                 .foregroundStyle(theme.subtle)
@@ -176,27 +175,87 @@ private struct ItemTile: View {
     let cell: PlanCell
     let theme: Theme
     let size: CGFloat
+    /// Bu koltuğu sahiplenen üyeler (en fazla seatCapacity adet). Avatarlar üst sağ köşede.
+    var occupants: [TeamMember] = []
 
     private var color: Color { Color(hex: cell.def.category.colorHex) }
 
     var body: some View {
-        VStack(spacing: 3) {
-            Image(systemName: cell.def.icon)
-                .font(.system(size: size * 0.34, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(height: size * 0.42)
-            Text(cell.def.name)
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(theme.textSecondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.7)
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 3) {
+                Image(systemName: cell.def.icon)
+                    .font(.system(size: size * 0.34, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(height: size * 0.42)
+                Text(cell.def.name)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(theme.textSecondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.7)
+            }
+            .padding(4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if !occupants.isEmpty {
+                occupantBadges.padding(3)
+            }
         }
-        .padding(4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.s))
         .overlay(RoundedRectangle(cornerRadius: Radius.s).stroke(color.opacity(0.4), lineWidth: 1))
     }
+
+    /// Avatar yığını: en fazla 2 görünür başharf rozeti, fazlası "+N".
+    private var occupantBadges: some View {
+        let visible = Array(occupants.prefix(2))
+        let extra = max(0, occupants.count - visible.count)
+        return HStack(spacing: -3) {
+            ForEach(visible) { m in
+                Text(m.initials)
+                    .font(.system(size: 7, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 14, height: 14)
+                    .background(deptColor(for: m.deptIndex), in: Circle())
+                    .overlay(Circle().stroke(Palette.gold, lineWidth: m.isFounder ? 1 : 0))
+                    .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 0.5))
+            }
+            if extra > 0 {
+                Text("+\(extra)")
+                    .font(.system(size: 6, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 14, height: 14)
+                    .background(Color.black.opacity(0.55), in: Circle())
+            }
+        }
+    }
+
+    private func deptColor(for deptIndex: Int) -> Color {
+        guard deptIndex >= 0 && deptIndex < Balance.departments.count else { return .gray }
+        return Color(hex: Balance.departments[deptIndex].colorHex)
+    }
+}
+
+/// Üyeleri ofisteki koltuklu eşyalara sırayla dağıt. Sıra: önce kurucu (her zaman ilk
+/// koltukta), sonra mevcut hire sırasıyla diğer üyeler. Yalnızca seatCapacity > 0
+/// olan cell'ler oturma yeri olarak kullanılır. Çıktı: `cell index → o cell'in sakinleri`.
+private func assignMembersToSeats(cells: [PlanCell], members: [TeamMember])
+    -> [Int: [TeamMember]] {
+    var queue: [TeamMember] = []
+    if let founder = members.first(where: { $0.isFounder }) { queue.append(founder) }
+    queue.append(contentsOf: members.filter { !$0.isFounder })
+
+    var assignments: [Int: [TeamMember]] = [:]
+    for (idx, cell) in cells.enumerated() {
+        let seats = cell.def.seatCapacity
+        guard seats > 0, !queue.isEmpty else { continue }
+        var here: [TeamMember] = []
+        for _ in 0..<seats {
+            guard !queue.isEmpty else { break }
+            here.append(queue.removeFirst())
+        }
+        assignments[idx] = here
+    }
+    return assignments
 }
 
 /// Hafif grid arka plan çizgileri (mimari kroki hissi).

@@ -1,27 +1,28 @@
 import SwiftUI
 
-/// Genişleyip sönen kutlama parıltı halkası.
+/// Sade hero ışıltı — tek ince halka tek defa açılıp söner (premium kutlama hissi,
+/// neon halo değil). Daha küçük scale + daha düşük opacity.
 private struct CelebrationRing: View {
     let color: Color
     @State private var animate = false
     var body: some View {
         Circle()
-            .stroke(color, lineWidth: 3)
-            .frame(width: 90, height: 90)
-            .scaleEffect(animate ? 2.2 : 0.4)
-            .opacity(animate ? 0 : 1)
+            .stroke(color.opacity(0.55), lineWidth: 1.5)
+            .frame(width: 92, height: 92)
+            .scaleEffect(animate ? 1.6 : 0.7)
+            .opacity(animate ? 0 : 0.85)
             .onAppear {
-                withAnimation(.easeOut(duration: 1.3).repeatCount(2, autoreverses: false)) {
+                withAnimation(.easeOut(duration: 1.1)) {
                     animate = true
                 }
             }
     }
 }
 
-/// Hafif konfeti yağmuru — yukarıdan düşen renkli parçacıklar (sadece kutlama).
+/// Sade konfeti — sadece kutlama anı; partikül sayısı düşük (premium restraint).
 private struct ConfettiBurst: View {
     var colors: [Color] = [Palette.unicorn, Palette.gold, Palette.success, Color(hex: "5B8DEF")]
-    private let count = 26
+    private let count = 10
     @State private var fall = false
 
     var body: some View {
@@ -70,7 +71,6 @@ struct FundingRoundView: View {
                     Image(systemName: Icons.Screen.funding)
                         .font(.system(size: 60, weight: .bold))
                         .foregroundStyle(theme.accent)
-                        .shadow(color: theme.accent.opacity(0.3), radius: 9)
                         .scaleEffect(appeared ? 1 : 0.4)
                 }
                 .frame(height: 90)
@@ -132,7 +132,6 @@ struct WinView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
     @State private var appeared = false
-    @State private var glowPulse = false
 
     private var league: LeagueDef { model.currentLeague }
     private var seasonTitle: SeasonTitleDef { model.currentSeasonTitle }
@@ -147,17 +146,14 @@ struct WinView: View {
             if appeared { ConfettiBurst().ignoresSafeArea() }
 
             VStack(spacing: Space.s4) {
-                // Zafer ikonu — taç, çift parıltı halkası + nabız glow.
+                // Zafer ikonu — taç + tek sade hero ışıltı (kontrollü kutlama).
                 ZStack {
                     if appeared {
                         CelebrationRing(color: Palette.unicorn)
-                        CelebrationRing(color: Palette.gold)
                     }
                     Image(systemName: Icons.Screen.win)
                         .font(.system(size: 84, weight: .bold))
                         .foregroundStyle(Palette.unicorn)
-                        .shadow(color: Palette.unicorn.opacity(glowPulse ? 0.55 : 0.25),
-                                radius: glowPulse ? 22 : 11)
                         .scaleEffect(appeared ? 1 : 0.5)
                 }
                 .frame(height: 108)
@@ -165,7 +161,6 @@ struct WinView: View {
                 Text("UNICORN!")
                     .font(.displayXL)
                     .foregroundStyle(Palette.unicorn)
-                    .shadow(color: Palette.unicorn.opacity(0.3), radius: 9)
 
                 // "$1 MİLYAR" vurgusu — gold rozet.
                 Text("$1 MİLYAR DEĞERLEME")
@@ -209,9 +204,6 @@ struct WinView: View {
         .onAppear {
             Haptics.success()
             withAnimation(Motion.bouncy) { appeared = true }
-            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
-                glowPulse = true
-            }
         }
     }
 

@@ -81,6 +81,13 @@ private struct DeptRow: View {
                     Spacer()
                 }
 
+                // Üye listesi: kim oturuyor, hangi projede çalışıyor (kimlik katmanı).
+                // Çok sayıda üye varsa max 4 göster + "+N daha" rozeti — kart şişmesin.
+                let members = model.members(in: dept.id)
+                if !members.isEmpty {
+                    rosterRows(members: members)
+                }
+
                 HStack(spacing: Space.s2) {
                     // Çıkar: danger dili (ikon yeterli, nötr dolgu).
                     Button { Haptics.tap(); model.fire(dept.id) } label: {
@@ -113,6 +120,67 @@ private struct DeptRow: View {
                 }
             }
         }
+    }
+
+    /// Departmandaki üyelerin mini satırları: avatar (initial) + ad + skill yıldızları + proje rozeti.
+    /// Maksimum 4 satır; fazlası "+N" rozetiyle özetlenir (kart şişmemesi için).
+    @ViewBuilder
+    private func rosterRows(members: [TeamMember]) -> some View {
+        let visible = Array(members.prefix(4))
+        let extra = max(0, members.count - visible.count)
+        VStack(spacing: 4) {
+            ForEach(visible) { m in
+                memberRow(m)
+            }
+            if extra > 0 {
+                HStack {
+                    Text("+\(extra) kişi daha")
+                        .font(.numberXS).foregroundStyle(theme.subtle)
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+    }
+
+    private func memberRow(_ m: TeamMember) -> some View {
+        let projectName = m.assignedProjectID
+            .flatMap { id in model.projects.first(where: { $0.id == id })?.name }
+        return HStack(spacing: Space.s2) {
+            // Avatar: deptColor zemin + initials
+            Text(m.initials)
+                .font(.appText(9, .heavy))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(deptColor, in: Circle())
+                .overlay(
+                    // Kurucu rozeti: küçük taç noktası
+                    Circle().stroke(Palette.gold, lineWidth: m.isFounder ? 1.5 : 0)
+                )
+
+            // Ad + ünvan / kıdem
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 4) {
+                    Text(m.fullName).font(.appText(11, .semibold)).foregroundStyle(theme.text)
+                        .lineLimit(1)
+                    if m.isFounder {
+                        Text("CEO").font(.system(size: 7, weight: .black)).foregroundStyle(Palette.gold)
+                            .padding(.horizontal, 3).padding(.vertical, 1)
+                            .background(Palette.gold.opacity(0.18), in: Capsule())
+                    }
+                }
+                HStack(spacing: 4) {
+                    Text(m.skillStars).font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(Palette.gold)
+                    if let pname = projectName {
+                        Text("· \(pname)").font(.appText(9, .medium))
+                            .foregroundStyle(theme.subtle).lineLimit(1)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4).padding(.vertical, 3)
     }
 
     /// Departman çıktı oranını dolu bar olarak gösterir (referans olarak headcount*2 hedef).

@@ -1,17 +1,17 @@
 import SwiftUI
 
-/// Genişleyip sönen kutlama parıltı halkası (terfi anı).
+/// Sade hero ışıltı (terfi anı — kontrollü kutlama, neon halo YOK).
 private struct CycleCelebrationRing: View {
     let color: Color
     @State private var animate = false
     var body: some View {
         Circle()
-            .stroke(color, lineWidth: 3)
+            .stroke(color.opacity(0.55), lineWidth: 1.5)
             .frame(width: 96, height: 96)
-            .scaleEffect(animate ? 2.2 : 0.4)
-            .opacity(animate ? 0 : 1)
+            .scaleEffect(animate ? 1.5 : 0.7)
+            .opacity(animate ? 0 : 0.85)
             .onAppear {
-                withAnimation(.easeOut(duration: 1.3).repeatCount(2, autoreverses: false)) {
+                withAnimation(.easeOut(duration: 1.1)) {
                     animate = true
                 }
             }

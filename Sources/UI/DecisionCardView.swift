@@ -96,8 +96,8 @@ struct DecisionCardView: View {
                 .frame(height: 3)
                 .padding(.horizontal, Space.s6)
         }
-        .overlay(RoundedRectangle(cornerRadius: Radius.overlay).stroke(tint.opacity(0.3), lineWidth: 1.5))
-        .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
+        .overlay(RoundedRectangle(cornerRadius: Radius.overlay).stroke(tint.opacity(0.32), lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 18, y: 6)
     }
 
     /// Etki ön-izleme satırı: + (yeşil ↑) / − (kırmızı ↓) ikonlu detay.

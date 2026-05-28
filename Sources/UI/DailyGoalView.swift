@@ -99,18 +99,18 @@ struct DailyGoalCard: View {
     }
 }
 
-/// Genişleyip sönen kutlama parıltı halkası (günlük hedef kapanışı) — CycleReview dilinde.
+/// Sade hero ışıltı (günlük hedef kapanışı — kontrollü kutlama, neon halo YOK).
 private struct DailyCloseRing: View {
     let color: Color
     @State private var animate = false
     var body: some View {
         Circle()
-            .stroke(color, lineWidth: 3)
+            .stroke(color.opacity(0.55), lineWidth: 1.5)
             .frame(width: 88, height: 88)
-            .scaleEffect(animate ? 2.1 : 0.4)
-            .opacity(animate ? 0 : 1)
+            .scaleEffect(animate ? 1.5 : 0.7)
+            .opacity(animate ? 0 : 0.85)
             .onAppear {
-                withAnimation(.easeOut(duration: 1.2).repeatCount(2, autoreverses: false)) {
+                withAnimation(.easeOut(duration: 1.1)) {
                     animate = true
                 }
             }
@@ -167,9 +167,9 @@ struct DailyCloseView: View {
             if appeared { DailyCloseRing(color: color) }
             ZStack {
                 Circle()
-                    .fill(color.opacity(0.16))
+                    .fill(color.opacity(0.14))
                     .frame(width: 88, height: 88)
-                    .overlay(Circle().stroke(color.opacity(0.5), lineWidth: 3))
+                    .overlay(Circle().stroke(color.opacity(0.45), lineWidth: 1.5))
                 VStack(spacing: 0) {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 26, weight: .bold))
