@@ -81,13 +81,16 @@ enum DailyGoalSystem {
     // MARK: Streak mantığı (gerçek tarih farkı)
 
     /// Yeni güne geçildiğinde streak'i güncelle.
-    /// - dünkü hedef tamamlandıysa ve gün farkı tam 1 ise streak +1
-    /// - gün atlanırsa (fark > 1) veya dün tamamlanmadıysa streak 1'e/0'a sıfırlanır
+    /// Tek-sahiplik kuralı: günün +1'i `checkDailyCompletion`'da eklenir (tamamladığın
+    /// an 🔥 anında artar). Burada YALNIZCA seriyi KORUR ya da KIRARIZ — tekrar +1 YOK
+    /// (yoksa çift-sayım: tamamlama +1, rollover +1 = 2 günde 3 görünürdü).
+    /// - dün tamamlandıysa ve gün farkı tam 1 ise seri korunur (bugünün tamamlanması +1 ekler)
+    /// - gün atlanırsa (fark > 1) veya dün tamamlanmadıysa seri sıfırlanır
     /// Dönüş: yeni streak değeri.
     static func rolledStreak(previousStreak: Int, dayGap: Int, yesterdayCompleted: Bool) -> Int {
         guard dayGap >= 1 else { return previousStreak }   // aynı gün — değişme
         if dayGap == 1 && yesterdayCompleted {
-            return previousStreak + 1
+            return previousStreak                          // koru — bugünün +1'i tamamlamada eklenir
         }
         // Gün kaçırıldı ya da dün tamamlanmadı → sıfırla.
         return 0

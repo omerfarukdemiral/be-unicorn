@@ -2,6 +2,10 @@ import Foundation
 
 /// Kaydedilebilir oyun durumu. Saf veri — mantık GameModel'de.
 struct GameState: Codable {
+    /// Şema sürümü — gelecekte alan eklenip/değişince migration zinciri için.
+    /// Eski kayıtta yoksa varsayılan 1 gelir (decode patlamaz).
+    var schemaVersion: Int = 1
+
     // Para & şirket
     var cash: Double = Balance.startCash
     var lifetimeRevenue: Double = 0
@@ -22,9 +26,11 @@ struct GameState: Codable {
     // Ekip (departman jeneratörleri — sayaç) + bireysel üyeler (kimlik katmanı).
     // `headcount` ekonomi formülleri için tek doğruluk kaynağıdır; `members` üstüne
     // ad/skill/proje atanması ekler. normalize() ikisini her zaman senkron tutar.
-    var headcount: [Int]
+    // Varsayılan ataması ŞART: eski/eksik JSON'da bu alanlar yoksa decode patlamasın,
+    // normalize() sonradan doğru boyuta getirir. (Varsayılansız bırakmak = tüm save reddi.)
+    var headcount: [Int] = Array(repeating: 0, count: Balance.departmentCount)
     var members: [TeamMember] = []
-    var moduleLevels: [Int]
+    var moduleLevels: [Int] = Array(repeating: 0, count: Balance.modules.count)
 
     // Ofis eşyaları (itemId → adet). Eski kayıtta yoksa boş gelir; normalize tohumlar.
     var ownedItems: [Int: Int] = [:]
@@ -122,6 +128,87 @@ struct GameState: Codable {
         moduleLevels = Array(repeating: 0, count: Balance.modules.count)
         // Garaj başlangıcı: birkaç basit masa tohumla ki ilk çalışan(lar) oturabilsin.
         ownedItems = [0: 2]
+    }
+
+    // MARK: - Migration-proof decode
+    //
+    // ÖNEMLİ: Swift'in SENTEZLEDİĞİ Codable init'i, alan varsayılan değerlerini KULLANMAZ —
+    // eksik bir anahtar (eski save, sonradan eklenen alan) `keyNotFound` ile decode'u
+    // tümüyle patlatır ve TÜM ilerleme reddedilir. Bu yüzden her alanı `decodeIfPresent`
+    // + güvenli varsayılan ile çözüyoruz: artık eksik HERHANGİ bir alan save'i bozmaz,
+    // normalize()/migrate() devreye girebilir. (Audit #7 + #10'un gerçek/kalıcı çözümü.)
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func g<T: Decodable>(_ k: CodingKeys, _ def: T) -> T {
+            ((try? c.decodeIfPresent(T.self, forKey: k)) ?? nil) ?? def
+        }
+        schemaVersion = g(.schemaVersion, 1)
+        cash = g(.cash, Balance.startCash)
+        lifetimeRevenue = g(.lifetimeRevenue, 0)
+        users = g(.users, 0)
+        reputation = g(.reputation, 20)
+        morale = g(.morale, Balance.startMorale)
+        founderEquity = g(.founderEquity, 1.0)
+        profile = g(.profile, CompanyProfile())
+        projects = g(.projects, [ProjectState]())
+        scenarios = g(.scenarios, [ScenarioInstance]())
+        scenarioLastSpawnMonth = g(.scenarioLastSpawnMonth, 0)
+        headcount = g(.headcount, Array(repeating: 0, count: Balance.departmentCount))
+        members = g(.members, [TeamMember]())
+        moduleLevels = g(.moduleLevels, Array(repeating: 0, count: Balance.modules.count))
+        ownedItems = g(.ownedItems, [Int: Int]())
+        adBudgetPerMonth = g(.adBudgetPerMonth, 0)
+        stage = g(.stage, 0)
+        stageReached = g(.stageReached, 0)
+        seenEventIDs = g(.seenEventIDs, [String]())
+        pendingEventID = ((try? c.decodeIfPresent(String.self, forKey: .pendingEventID)) ?? nil)
+        moraleTargetBonus = g(.moraleTargetBonus, 0)
+        crisisChainCount = g(.crisisChainCount, 0)
+        months = g(.months, 0)
+        totalDecisions = g(.totalDecisions, 0)
+        totalHires = g(.totalHires, 0)
+        bankruptcies = g(.bankruptcies, 0)
+        founderXP = g(.founderXP, 0)
+        leagueTier = g(.leagueTier, 0)
+        quarterIndex = g(.quarterIndex, 0)
+        quarterStartMonth = g(.quarterStartMonth, 0)
+        quarterStartUsers = g(.quarterStartUsers, 0)
+        quarterStartValuation = g(.quarterStartValuation, 0)
+        quarterStartMRR = g(.quarterStartMRR, 0)
+        quarterStartDecisions = g(.quarterStartDecisions, 0)
+        quarterMoraleSum = g(.quarterMoraleSum, 0)
+        quarterMoraleSamples = g(.quarterMoraleSamples, 0)
+        dailyDayKey = g(.dailyDayKey, 0)
+        dailyHires = g(.dailyHires, 0)
+        dailyDecisions = g(.dailyDecisions, 0)
+        dailyUsersStart = g(.dailyUsersStart, 0)
+        dailyCompleted = g(.dailyCompleted, false)
+        streak = g(.streak, 0)
+        bestStreak = g(.bestStreak, 0)
+        dailyGoalsThisQuarter = g(.dailyGoalsThisQuarter, 0)
+        sprintIndex = g(.sprintIndex, 0)
+        sprintStartMonth = g(.sprintStartMonth, 0)
+        sprintGoalKind = g(.sprintGoalKind, 0)
+        sprintGoalTarget = g(.sprintGoalTarget, 0)
+        sprintStartMRR = g(.sprintStartMRR, 0)
+        sprintStartUsers = g(.sprintStartUsers, 0)
+        sprintStartDecisions = g(.sprintStartDecisions, 0)
+        sprintsWonThisQuarter = g(.sprintsWonThisQuarter, 0)
+        seasonIndex = g(.seasonIndex, 0)
+        quartersThisSeason = g(.quartersThisSeason, 0)
+        seasonsCompleted = g(.seasonsCompleted, 0)
+        seasonPromotions = g(.seasonPromotions, 0)
+        seasonHighestTier = g(.seasonHighestTier, 0)
+        seasonSprintsWon = g(.seasonSprintsWon, 0)
+        seasonDailyGoals = g(.seasonDailyGoals, 0)
+        seasonScoreSum = g(.seasonScoreSum, 0)
+        cohortNames = g(.cohortNames, [String]())
+        cohortScores = g(.cohortScores, [Double]())
+        cohortTier = g(.cohortTier, -1)
+        history = g(.history, [HistoryPoint]())
+        lastSaved = g(.lastSaved, Date())
+        hasSeenOnboarding = g(.hasSeenOnboarding, false)
+        currency = g(.currency, Currency.usd)
     }
 
     mutating func normalize() {

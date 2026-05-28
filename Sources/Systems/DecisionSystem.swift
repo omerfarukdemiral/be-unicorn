@@ -106,9 +106,29 @@ enum DecisionSystem {
     @MainActor
     static func pick(for model: GameModel, state: GameState) -> DecisionCard? {
         let eligible = DecisionContent.all.filter { isEligible($0, model: model, state: state) }
-        guard !eligible.isEmpty else { return nil }
+        // Havuz boşaldıysa (örn. tüm once kartları tükendi, erken evre) DEAD AIR olmasın:
+        // jenerik, etkisiz bir "mentor ipucu" kartı dön — oyuncu akışta kalır.
+        guard !eligible.isEmpty else { return mentorTipFallback() }
         return weightedPick(from: eligible, health: model.companyHealth,
                             chainCount: state.crisisChainCount)
+    }
+
+    /// Karar havuzu geçici olarak boşaldığında gösterilen nötr fallback kartı.
+    /// Etkisi sıfıra yakın (ekonomiyi bozmaz), ama eğitici bir mentor mesajı taşır —
+    /// oyuncu "bekleme/ölü an" yaşamaz. Birkaç varyanttan rastgele biri seçilir.
+    static func mentorTipFallback() -> DecisionCard {
+        let tips: [(String, String, String)] = [
+            ("Şu an sular durgun. Bu nadir an: metriklerine bak, bir sonraki hamleni planla.",
+             "Metrikleri incele", "Sakin dönemler stratejik düşünme fırsatıdır — her an kriz olmak zorunda değil."),
+            ("Mentorun arıyor: \"Bu hafta öğrendiğin en önemli şey neydi?\" diye soruyor.",
+             "Düşün ve devam et", "En iyi kurucular düzenli olarak geriye bakıp ders çıkarır; ivme refleksten değil farkındalıktan gelir."),
+            ("Ekip iyi gidiyor, acil bir karar yok. Bir kahve al, ürününü bir kullanıcı gözüyle dene.",
+             "Ürünü gözden geçir", "Kendi ürününü kullanmak (dogfooding) en ucuz ve en dürüst geri bildirimdir."),
+        ]
+        let pick = tips.randomElement() ?? tips[0]
+        return DecisionCard("mentor-tip", category: .opportunity, speaker: "Mentor", icon: "🧭",
+                            prompt: pick.0,
+                            choices: [DecisionChoice(pick.1, detail: nil, effects: [], result: pick.2)])
     }
 
     /// Sağlık durumuna göre kategori ağırlıkları üret + ağırlıklı rastgele seçim.

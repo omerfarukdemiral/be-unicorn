@@ -612,7 +612,7 @@ final class GameModel: ObservableObject {
         let end = LeagueSystem.Snapshot(users: state.users,
                                         valuation: valuation, mrr: mrr,
                                         decisions: state.totalDecisions)
-        var b = LeagueSystem.evaluate(start: start, end: end, avgMorale: avgMorale)
+        let b = LeagueSystem.evaluate(start: start, end: end, avgMorale: avgMorale)
         let dailyBonus = DailyGoalSystem.leagueScoreBonus(
             streak: state.streak, dailyGoalsThisQuarter: state.dailyGoalsThisQuarter)
         let sprintBonus = SprintSystem.leagueScoreBonus(

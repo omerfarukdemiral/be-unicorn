@@ -27,6 +27,71 @@ enum DecisionContent {
                       result: "Onları korumayı seçtin. (Bilinçli \"hayır\" da bir hisse stratejisidir.)")
             ]),
 
+        // MARK: - Erken-oyun kurucu ikilemleri (tekrarlanabilir, düşük-stake)
+        // Garaj evresinde karar havuzu çabuk boşalmasın diye: gerçek trade-off'lu,
+        // küçük etkili, zamansız "kurucu hayatı" kararları. once:false → akış kopmaz.
+        // (cashPercent YOK — istismar riski yaratmaz.)
+
+        DecisionCard("early-focus", category: .product, speaker: "Ortağın", icon: "🎯",
+            prompt: "Ortağın \"bir sürü özellik ekleyelim, daha çok kişiye hitap eder\" diyor. Sen tek bir şeyi mükemmel yapmak istiyorsun.",
+            trigger: .minUsers(0),
+            choices: [
+                .init("Tek işi cilala", detail: "+derinlik + moral / büyüme yavaş", effects: [.morale(3), .reputation(3), .usersPercent(0.02)],
+                      result: "Daha az ama daha iyi. (Erken aşamada 100 kişinin bayıldığı ürün, 1000 kişinin umursamadığından iyidir.)"),
+                .init("Özellik ekle, geniş tut", detail: "+kısa vade kullanıcı / odak dağılır", effects: [.usersPercent(0.05), .morale(-2)],
+                      result: "Yelpaze açıldı. (Geniş ürün = sığ ürün riski; \"herkes için\" çoğu zaman \"hiç kimse için\"dir.)")
+            ]),
+
+        DecisionCard("early-channel", category: .market, speaker: "Sen", icon: "📣",
+            prompt: "İlk kullanıcıları nasıl bulacaksın? Tek tek elle mi, yoksa hemen reklam mı?",
+            trigger: .minUsers(0),
+            choices: [
+                .init("Elle, tek tek konuş", detail: "yavaş / +öğrenme + sadık çekirdek", effects: [.usersPercent(0.03), .reputation(4), .moraleTargetBonus(1)],
+                      result: "İlk 10 kullanıcıyı tanıyorsun. (\"Ölçeklenmeyen şeyleri yap\" — erken çekirdek elle kazanılır.)"),
+                .init("Hemen reklam ver", detail: "+hızlı sayı / pahalı + sığ", effects: [.usersPercent(0.06), .cash(-3_000)],
+                      result: "Sayılar arttı ama tutmuyor. (Ürün-pazar uyumu yokken reklam, delik kovaya su taşır.)")
+            ]),
+
+        DecisionCard("early-sidegig", category: .opportunity, speaker: "Eski Müşteri", icon: "💼",
+            prompt: "Eski bir müşteri sana 2 haftalık danışmanlık için iyi para teklif ediyor. Ama o 2 hafta ürününe gitmeyecek.",
+            trigger: .minUsers(0),
+            choices: [
+                .init("Kabul et, kasayı doldur", detail: "+nakit / 2 hafta ürün durur", effects: [.cash(8_000), .moraleTargetBonus(-1)],
+                      result: "Runway uzadı ama ürün bekledi. (Danışmanlık geliri tatlıdır; bağımlılık yaparsa startup'ı ajansa çevirir.)"),
+                .init("Reddet, ürüne odaklan", detail: "kasa aynı / +momentum", effects: [.morale(3), .reputation(2), .usersPercent(0.02)],
+                      result: "Odağı korudun. (Para kazanmak ile şirket kurmak farklı işlerdir; hangisini yaptığını bil.)")
+            ]),
+
+        DecisionCard("early-burnout", category: .team, speaker: "Vücudun", icon: "😮‍💨",
+            prompt: "3 haftadır günde 14 saat çalışıyorsun. Bu hız sürdürülebilir değil ama liste uzun.",
+            trigger: .minUsers(0),
+            choices: [
+                .init("Tempoyu düşür, dinlen", detail: "−kısa vade hız / +sürdürülebilir moral", effects: [.morale(6), .moraleTargetBonus(1), .usersPercent(-0.01)],
+                      result: "Nefes aldın. (Startup maraton; tükenmiş kurucu, en pahalı tek-nokta-arızasıdır.)"),
+                .init("Sıkı dişini, push'la", detail: "+kısa vade ilerleme / moral erir", effects: [.usersPercent(0.03), .morale(-5)],
+                      result: "Liste kısaldı, sen de. (Sprint ara sıra iyidir; kalıcı kriz modu ekibi de seni de yer.)")
+            ]),
+
+        DecisionCard("early-feedback", category: .product, speaker: "İlk Kullanıcı", icon: "🗣️",
+            prompt: "İlk kullanıcılardan biri \"şu olmadan kullanamam\" dediği bir özellik istiyor. Ama bu senin vizyonunda yoktu.",
+            trigger: .minUsers(0),
+            choices: [
+                .init("Dinle, hızlı dene", detail: "+kullanıcı yakınlığı / vizyon esner", effects: [.usersPercent(0.04), .reputation(3), .morale(-1)],
+                      result: "Kullanıcıyı dinledin. (Tek kullanıcının çığlığı sinyal olabilir de gürültü de; deseni ara.)"),
+                .init("Vizyona sadık kal", detail: "+netlik / o kullanıcı küser", effects: [.reputation(2), .moraleTargetBonus(1), .usersPercent(-0.01)],
+                      result: "Çizgini korudun. (Her isteğe evet = yön kaybı; ama tüm \"hayır\"lar da körlük olabilir.)")
+            ]),
+
+        DecisionCard("early-equity-split", category: .team, speaker: "Kurucu Ortak", icon: "🤝",
+            prompt: "Ortağınla hisse dağılımını netleştirme zamanı. 50-50 mi, yoksa katkıya göre mi?",
+            once: true, trigger: .minUsers(0),
+            choices: [
+                .init("Eşit böl, basit tut", detail: "+güven / gelecekte adaletsizlik riski", effects: [.morale(4), .moraleTargetBonus(1)],
+                      result: "El sıkıştınız. (50-50 ilişkiyi rahatlatır; ama vesting yoksa ayrılıkta şirketi kilitleyebilir.)"),
+                .init("Katkıya göre + vesting", detail: "+adil yapı / zor konuşma", effects: [.reputation(3), .morale(-2), .moraleTargetBonus(1)],
+                      result: "Zor ama net konuştunuz. (Vesting kurucu kavgasının sigortasıdır; rahatken yapılır, kriz anında değil.)")
+            ]),
+
         // MARK: - Yatırımcı Turları
 
         DecisionCard("seed-termsheet", category: .investor, speaker: "VC Fonu", icon: "📋",
@@ -251,7 +316,7 @@ enum DecisionContent {
 
         DecisionCard("pricing-change", category: .product, speaker: "Ürün & Büyüme", icon: "💰",
             prompt: "Freemium modelin çalışmıyor; bedava kullananlar ödeme yapmıyor. Fiyatı iki katına çıkar mı?",
-            trigger: .minUsers(500),
+            once: true, trigger: .minUsers(500),
             choices: [
                 .init("Paywall'ı sertleştir", detail: "+gelir + ARPU netleşir / kullanıcı erimesi", effects: [.cashPercent(0.25), .usersPercent(-0.14), .reputation(-3), .moraleTargetBonus(-1)],
                       result: "Ödeyenler arttı. (Freemium dönüşmüyorsa, ödeyen segmentin gerçek değerini sakladığın için kaybediyorsundur.)"),

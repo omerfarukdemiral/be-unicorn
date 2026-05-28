@@ -60,9 +60,10 @@ struct DecisionCardView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: Space.s2) {
-                ForEach(Array(card.choices.enumerated()), id: \.offset) { idx, choice in
-                    // İlk (cesur) seçim hafif tint dolgulu kenarlık, sonrası nötr.
-                    let bold = idx == 0
+                // "Tek doğru cevap yok" ilkesi: tüm seçenekler GÖRSEL OLARAK EŞİT.
+                // (Eskiden ilk seçim tint dolgu + kalın kenarlıkla "önerilen" gibi
+                //  görünüyordu — bu önyargı kaldırıldı.)
+                ForEach(Array(card.choices.enumerated()), id: \.offset) { _, choice in
                     Button {
                         Haptics.tap()
                         withAnimation(Motion.quick) { appeared = false }
@@ -77,11 +78,10 @@ struct DecisionCardView: View {
                             }
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, Space.s3)
-                        .background(bold ? tint.opacity(0.14) : theme.surfaceHigh,
+                        .background(theme.surfaceHigh,
                                     in: RoundedRectangle(cornerRadius: Radius.m))
                         .overlay(RoundedRectangle(cornerRadius: Radius.m)
-                            .stroke(bold ? tint.opacity(0.6) : theme.hairline,
-                                    lineWidth: bold ? 1.2 : 1))
+                            .stroke(theme.hairline, lineWidth: 1))
                     }
                     .buttonStyle(.pressable)
                 }
