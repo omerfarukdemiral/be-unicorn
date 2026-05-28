@@ -838,12 +838,84 @@ enum DecisionContent {
 
         DecisionCard("price-bump-30", category: .product, speaker: "CFO", icon: "📈",
             prompt: "Mevcut müşterilere %30 fiyat artırmayı düşünüyorsun. Sektörde altındasın; ama churn riski var.",
-            trigger: .minUsers(2_000),
+            once: true, trigger: .minUsers(2_000),   // once: pozitif cashPercent istismarını kapat (audit #2 deseni)
             choices: [
                 .init("Yeni kullanıcılara artır, eski grandfathered", detail: "+yeni gelir / +eski kullanıcı korunur + iki fiyat karmaşası", effects: [.cashPercent(0.15), .usersPercent(-0.04), .reputation(3), .morale(2)],
                       result: "Yeni fiyat etiketi. (Pricing power'ın varsa erken kullan; sektör altı fiyat değer sinyali değil, alt değer algısıdır.)"),
                 .init("Tüm hattı %30 artır", detail: "+yüksek gelir / churn riski + topluluk reaksiyonu", effects: [.cashPercent(0.22), .usersPercent(-0.12), .reputation(-4), .morale(-2)],
                       result: "Genel artış. (Fiyat değişimi ürün değişimi gibi iletilirse kabul edilir; sessiz artış güveni en çabuk yer.)")
+            ]),
+
+        // MARK: - Geç-oyun: Çıkış, Halka Arz & Kurumsal Olgunluk (#16)
+
+        DecisionCard("ipo-vs-stay-private", category: .investor, speaker: "Yatırım Bankacısı", icon: "🔔",
+            prompt: "Bankacılar {{company}} için halka arz penceresinin açık olduğunu söylüyor: likidite + prestij, ama çeyreklik kâr baskısı ve kamuya açık her sayı. Yoksa özel kalıp uzun vadeli oynamak mı?",
+            once: true, trigger: .minStage(4),
+            choices: [
+                .init("Halka arza hazırlan", detail: "+büyük likidite + prestij / +çeyrek baskısı + raporlama yükü", effects: [.cash(3_000_000), .reputation(12), .morale(-4), .moraleTargetBonus(-1)],
+                      result: "Zil çalmaya hazırlanıyorsun. (IPO bir bitiş değil yeni bir kısıt: kamu piyasası uzun vadeli bahisleri çeyreklik beklentiye sıkıştırır.)"),
+                .init("Özel kal, sabırlı sermaye bul", detail: "+kontrol + uzun vade odak / likidite ertelenir", effects: [.reputation(6), .morale(5), .moraleTargetBonus(1)],
+                      result: "Özel kalmayı seçtin. (Özel kalmak ürün vizyonuna nefes alanı verir; ama erken çalışanların ve yatırımcıların likidite beklentisi bir gün masaya gelir.)")
+            ]),
+
+        DecisionCard("secondary-market-employees", category: .investor, speaker: "İK & Finans", icon: "💱",
+            prompt: "Erken çalışanlar yıllardır kâğıt üstünde zengin ama cebinde nakit yok. İkincil pazar turu açıp hisselerinin bir kısmını satmalarına izin verir misin?",
+            once: true, trigger: .minStage(4),
+            choices: [
+                .init("İkincil pazarı aç", detail: "+ekip sadakati + moral / dış yatırımcı cap table'a girer", effects: [.morale(9), .reputation(3), .moraleTargetBonus(1)],
+                      result: "Ekip biraz rahatladı. (Likidite penceresi sadakat satın alır; ama kontrolsüz ikincil, cap table'a istemediğin yatırımcıları sokabilir.)"),
+                .init("Şimdilik kapat, büyümeye yatır", detail: "+cap table temiz / +çalışan sabırsızlığı birikir", effects: [.reputation(2), .morale(-5), .moraleTargetBonus(-1)],
+                      result: "\"Daha büyük çıkışta hepimiz kazanırız\" dedin. (Ertelenen likidite bir bahistir; en iyi çalışanlar nakdi başka yerde bulabilir.)")
+            ]),
+
+        DecisionCard("antitrust-scrutiny", category: .crisis, speaker: "Düzenleyici Kurum", icon: "🏛️",
+            prompt: "{{company}} pazarda baskın hale geldi; bir rekabet otoritesi inceleme başlattı. İşbirliği yapıp yavaşlamak mı, yoksa agresif savunup büyümeye devam mı?",
+            once: true, trigger: .minStage(4),
+            choices: [
+                .init("İşbirliği yap, taahhüt ver", detail: "−nakit + bazı kısıtlar / +meşruiyet + risk düşer", effects: [.cash(-60_000), .reputation(6), .usersPercent(-0.03), .morale(-2)],
+                      result: "Masaya oturdun. (Düzenleyiciyle erken işbirliği pahalıdır ama varoluşsal riski azaltır; baskınlık görünürlük getirir.)"),
+                .init("Hukuki savunma, statükoyu koru", detail: "+kısa vade büyüme korunur / −uzun davalar + itibar riski", effects: [.cash(-25_000), .reputation(-5), .usersPercent(0.04), .moraleTargetBonus(-1)],
+                      result: "Savunmaya geçtin. (Düzenleyici savaşı yıllar sürer ve dikkat çalar; bazen kazanmak bile kaybettirir.)")
+            ]),
+
+        DecisionCard("mergers-acquisitions-buyer", category: .opportunity, speaker: "Kurumsal Geliştirme", icon: "🧩",
+            prompt: "Artık alıcı sensin: küçük bir rakip satın alınmaya hazır. Yeteneği ve teknolojisi sana sıçrama yaptırır, ama entegrasyon ekibini aylarca meşgul eder.",
+            trigger: .minStage(4),
+            choices: [
+                .init("Satın al, entegre et", detail: "+yetenek + teknoloji / −büyük nakit + entegrasyon yükü", effects: [.cash(-400_000), .headcount(dept: 0, delta: 1), .usersPercent(0.08), .reputation(5), .morale(-3)],
+                      result: "İlk satın alman tamam. (M&A büyümeyi hızlandırır ama entegrasyonların çoğu kültür çatışmasında değer kaybeder; satın almak kolay, kaynaştırmak zor.)"),
+                .init("Organik büyü, yeteneği kendin yetiştir", detail: "+kontrol + kültür bütünlüğü / +daha yavaş + fırsat rakibe gider", effects: [.morale(4), .reputation(3), .moraleTargetBonus(1)],
+                      result: "Kendi yolunda kaldın. (Organik büyüme kültürü korur ama pencere kapanabilir; rakip o ekibi başkası kaparsa pişman olabilirsin.)")
+            ]),
+
+        DecisionCard("founder-ceo-transition", category: .team, speaker: "Yönetim Kurulu", icon: "👔",
+            prompt: "Şirket bir kurucunun tek başına yönetemeyeceği ölçeğe ulaştı. Board deneyimli bir operasyon CEO'su getirip senin ürün/vizyona geçmeni öneriyor. Koltuğu bırakır mısın?",
+            once: true, trigger: .minStage(4),
+            choices: [
+                .init("Profesyonel CEO getir, başkan ol", detail: "+operasyonel olgunluk / −günlük kontrol + kimlik sancısı", effects: [.reputation(8), .morale(3), .moraleTargetBonus(1), .equity(-0.02)],
+                      result: "Direksiyonu paylaştın. (Kurucu-CEO geçişi başarısızlık değil olgunluktur; ama yanlış CEO kültürü bir çeyrekte eritebilir — seçim her şeydir.)"),
+                .init("CEO olarak kal, yanına güçlü COO al", detail: "+vizyon kontrolü / +kurucu üzerinde yük + ölçek riski", effects: [.cash(-20_000), .headcount(dept: 4, delta: 1), .morale(-2), .reputation(4)],
+                      result: "Koltukta kaldın, yükü paylaştın. (Kurucu kalmak vizyonu korur; ama her kurucu operatör değildir — kendine dürüst ol.)")
+            ]),
+
+        DecisionCard("strategic-acquirer-megaoffer", category: .opportunity, speaker: "Dev Teknoloji Şirketi", icon: "🐳",
+            prompt: "Sektörün devi {{company}} için yüklü bir satın alma teklifi masaya koydu: hayat değiştiren para, ama ürün onların ekosistemine gömülür ve marka kaybolur.",
+            once: true, trigger: .minStage(5),
+            choices: [
+                .init("Sat, mega çıkış yap", detail: "+devasa nakit / vizyon + marka kapanır + ekip dağılabilir", effects: [.cash(50_000_000), .equity(0.08), .reputation(6), .morale(-6)],
+                      result: "Tarihî çek imzalandı. (En büyük çıkış en büyük bahsin sonu olabilir; \"ya unicorn olsaydık\" sorusu ömür boyu kalır — ama kuş eldeyken de bir bilgelik var.)"),
+                .init("Reddet, bağımsız unicorn'a oyna", detail: "+upside + bağımsızlık / teklif bir daha gelmeyebilir", effects: [.morale(12), .reputation(11), .moraleTargetBonus(2)],
+                      result: "\"Biz daha büyüğüz\" dedin. (Reddedilen mega teklif cesarettir; ama piyasa döner ve aynı fiyat bir daha gelmeyebilir — bu da bir risk.)")
+            ]),
+
+        DecisionCard("dual-class-shares", category: .investor, speaker: "Hukuk & Finans", icon: "⚖️",
+            prompt: "Halka arz öncesi yapı kurarken çift sınıflı hisse önerildi: kurucu oyların çoğunu elinde tutar ama yatırımcılar yönetişim açısından çekinik.",
+            once: true, trigger: .minStage(5),
+            choices: [
+                .init("Çift sınıflı yapı kur", detail: "+uzun vade kontrol + vizyon koruması / yatırımcı güveni gerilir", effects: [.equity(0.03), .reputation(-3), .morale(4), .moraleTargetBonus(1)],
+                      result: "Kontrolü çapaladın. (Çift sınıf vizyonu kısa vadeli baskıdan korur; ama hesap verebilirliği zayıflatır — güç sorumlulukla dengelenmezse körlük getirir.)"),
+                .init("Tek sınıf, eşit oy", detail: "+yatırımcı güveni + yönetişim / kurucu daha kırılgan", effects: [.reputation(6), .equity(-0.02), .moraleTargetBonus(-1)],
+                      result: "Eşit oy hakkı seçtin. (Tek sınıf piyasanın güvenini kazanır; ama aktivist yatırımcılar bir gün yön değiştirmeye zorlayabilir.)")
             ]),
 
     ]

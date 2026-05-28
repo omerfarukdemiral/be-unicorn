@@ -140,6 +140,14 @@ enum LessonsContent {
             mechanic: "product"
         ),
 
+        LessonEntry(
+            id: "pricing-captures-value",
+            title: "Fiyat, Yarattığın Değeri Yakalamaktır",
+            body: "Fiyatlandırma maliyetin üstüne kâr koymak değil; kullanıcıya kattığın değerin bir kısmını geri almaktır. Çoğu kurucu çok düşük fiyatlar — \"ucuz olursak çok satarız\" sezgisi yanıltıcıdır: düşük fiyat hem geliri hem de algılanan değeri birlikte düşürür. Patrick Campbell'ın verisi nettir: startup'ların ezici çoğunluğu fiyatlandırmaya ürününe harcadığının çok altında zaman ayırır. Önce \"kim için, hangi değer\" sorusunu netleştir; fiyat o cevabın etiketidir.",
+            category: .product,
+            mechanic: "pricing"
+        ),
+
         // MARK: - Ekip
 
         LessonEntry(
