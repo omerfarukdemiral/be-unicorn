@@ -1,186 +1,235 @@
 import Foundation
 import AVFoundation
-import AudioToolbox
 
-/// Hafif, asset'siz UI sesi.
+/// Dosya tabanlı UI sesi + arka plan müziği yöneticisi.
 ///
-/// Gerçek SFX/müzik asset'i bu ortamda üretmek zor olduğundan, sesler AVAudioEngine ile
-/// çalışma anında üretilen kısa tonlardan (sine + zarf) oluşur. Tek bir paylaşılan engine
-/// + oynatıcıyla her efekt için ufak bir PCM buffer sentezlenir. Toggle UserDefaults'ta
-/// saklanır (GameState'e DOKUNULMAZ).
+/// Bundle'a gömülü kısa CC0 SFX dosyaları (`sfx_*.wav`) ve ambient bir döngü (`music_loop.m4a`)
+/// kullanır. Her efekt için 2 oynatıcılı bir havuz var; ardışık çağrılar birbirini kesmesin diye
+/// dönüşümlü çalınır. Ses kategorisi `.ambient` — sessiz anahtarına saygı, başka müziklerle karışır.
+///
+/// API kontratı:
+/// * `configure()` — uygulama açılırken çağrılır (UnicornApp).
+/// * `pause()`/`resume()` — scene lifecycle (ContentView).
+/// * `Feedback.play()` (Haptics.swift) üzerinden semantik çağrılar: `tap/select/decision/success/close/celebrate/warning/failure`.
+/// * `setEnabled(_:)`/`toggle()`/`isEnabled` — UI ses açma/kapama.
+/// * `setMusicEnabled(_:)`/`isMusicEnabled` — müzik aç/kapa.
+///
+/// Bundle'da SFX dosyası bulunamazsa o çağrı sessizce yutulur (sentetik fallback YOK).
 @MainActor
 final class AudioManager {
     static let shared = AudioManager()
 
-    private let defaultsKey = "unicorn.soundEnabled"
-    private let engine = AVAudioEngine()
-    private let player = AVAudioPlayerNode()
-    private let sampleRate: Double = 44_100
-    private var format: AVAudioFormat!
-    private var started = false
+    // MARK: - UserDefaults anahtarları (kalıcı ayar)
 
-    /// Sesin açık/kapalı durumu (UserDefaults'ta kalıcı). Kapalıyken hiçbir ton çalmaz.
+    private let soundKey = "unicorn.soundEnabled"
+    private let musicKey = "unicorn.musicEnabled"
+
+    /// UI sesinin açık/kapalı durumu (UserDefaults'ta kalıcı).
     private(set) var isEnabled: Bool
 
-    private init() {
-        // Varsayılan: açık. (Daha önce hiç ayarlanmadıysa true.)
-        if UserDefaults.standard.object(forKey: defaultsKey) == nil {
-            isEnabled = true
-        } else {
-            isEnabled = UserDefaults.standard.bool(forKey: defaultsKey)
-        }
+    /// Arka plan müziğinin açık/kapalı durumu (UserDefaults'ta kalıcı).
+    private(set) var isMusicEnabled: Bool
+
+    // MARK: - Oynatıcılar
+
+    /// Her SFX için 2 önceden yüklenmiş AVAudioPlayer (round-robin çakışmasız çalma).
+    private var sfxPlayers: [SFX: [AVAudioPlayer]] = [:]
+    private var sfxCursor: [SFX: Int] = [:]
+
+    /// Arka plan müziği oynatıcısı (sonsuz döngü).
+    private var musicPlayer: AVAudioPlayer?
+
+    /// Müzik çalmaya hazır mı (configure başarılı + dosya bulundu)?
+    private var musicReady = false
+
+    /// Uygulama foreground'da mı (müziği duraklat/sürdür kontrolü için).
+    private var isForeground = true
+
+    private var configured = false
+
+    // MARK: - SFX enum — SFX dosya isimleriyle eşleşir
+
+    /// AudioManager'ın çalabildiği semantik efektler.
+    /// Bundle'daki dosya adı `sfx_<rawValue>.wav` ile eşleşir.
+    enum SFX: String, CaseIterable {
+        case tap, select, decision, success, close, celebrate, warning, failure
     }
 
-    // MARK: - Kurulum / lifecycle (UnicornApp + ContentView çağırır)
+    // MARK: - Init
 
-    /// Uygulama başında bir kez: audio session + engine kur. Hata sessizce yutulur (ses kritik değil).
+    private init() {
+        // Varsayılan: ses açık, müzik açık (ilk kurulumda).
+        let defs = UserDefaults.standard
+        isEnabled      = defs.object(forKey: soundKey) == nil ? true : defs.bool(forKey: soundKey)
+        isMusicEnabled = defs.object(forKey: musicKey) == nil ? true : defs.bool(forKey: musicKey)
+    }
+
+    // MARK: - Kurulum / lifecycle
+
+    /// Uygulama başında bir kez: session ayarı + tüm SFX/müzik dosyalarını önceden yükle.
+    /// Hatalar sessizce yutulur (ses kritik değil; dosya yoksa sessiz kalır).
     func configure() {
-        guard !started else { return }
+        guard !configured else { return }
+        configured = true
+
+        // .ambient: sessiz anahtarına saygı duy, başka müziklerle karışsın.
         do {
             let session = AVAudioSession.sharedInstance()
-            // .ambient: sessiz anahtarına saygı duy, arka plan müziğini kesme.
             try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
-
-            format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
-            engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: format)
-            try engine.start()
-            player.play()
-            started = true
         } catch {
-            started = false   // sentez başarısız → sistem sesine düşeriz
+            // Session başarısız — yine de oynatıcıları kurmayı dene.
         }
+
+        // Tüm SFX dosyalarını önceden yükle (her biri için 2 oynatıcı; round-robin).
+        for fx in SFX.allCases {
+            sfxPlayers[fx] = preloadPlayers(named: "sfx_\(fx.rawValue)", count: 2, volume: defaultVolume(for: fx))
+            sfxCursor[fx] = 0
+        }
+
+        // Müzik oynatıcısını hazırla (loop sonsuz, düşük volume).
+        if let url = audioURL(named: "music_loop") {
+            do {
+                let p = try AVAudioPlayer(contentsOf: url)
+                p.numberOfLoops = -1
+                p.volume = 0.32           // ambient hissi için düşük volume
+                p.prepareToPlay()
+                musicPlayer = p
+                musicReady = true
+            } catch {
+                musicReady = false
+            }
+        }
+
+        // İlk açılışta müzik açıksa başlat.
+        if isMusicEnabled { startMusicIfNeeded() }
     }
 
-    /// Arka plana geçince engine'i duraklat (pil/CPU). Foreground'da resume.
+    /// Arka plana geçince müziği duraklat (pil/CPU). Foreground'da resume.
     func pause() {
-        guard started else { return }
-        engine.pause()
+        isForeground = false
+        musicPlayer?.pause()
+        // SFX'ler kısa; arka planda kalmaları sorun değil.
     }
 
     func resume() {
-        guard started else { return }
-        do {
-            try engine.start()
-            player.play()
-        } catch { /* sessiz */ }
+        isForeground = true
+        if isMusicEnabled, musicReady { startMusicIfNeeded() }
     }
 
-    // MARK: - Toggle
+    // MARK: - Toggle (UI tarafından çağrılır)
 
-    /// Sesi aç/kapa (UI ayar toggle'ı bunu çağırır). Kalıcıdır.
+    /// UI sesini aç/kapa (kalıcı).
     func setEnabled(_ on: Bool) {
         isEnabled = on
-        UserDefaults.standard.set(on, forKey: defaultsKey)
-        if on { tap() }   // küçük onay dokunuşu
+        UserDefaults.standard.set(on, forKey: soundKey)
+        if on { play(.tap) }   // küçük onay dokunuşu
     }
 
     @discardableResult
     func toggle() -> Bool {
         setEnabled(!isEnabled)
+        // Aynı tab bar düğmesi müziği de eşzamanlı aç/kapasın (tek toggle UX).
+        setMusicEnabled(isEnabled)
         return isEnabled
     }
 
-    // MARK: - Anlamsal efektler (GameModel/UI çağırır)
-
-    /// İşe alım / eşya alımı / hafif onay — kısa yumuşak "tık".
-    func tap() { play(tones: [Tone(freq: 660, dur: 0.05, gain: 0.18)]) }
-
-    /// Tab/seçim — çok kısa nötr tık.
-    func select() { play(tones: [Tone(freq: 880, dur: 0.03, gain: 0.12)]) }
-
-    /// Karar geldi — dikkat çeken çift nota (yükselen).
-    func decision() {
-        play(tones: [Tone(freq: 520, dur: 0.06, gain: 0.16),
-                     Tone(freq: 780, dur: 0.07, gain: 0.16)])
-    }
-
-    /// Günlük/sprint başarı — neşeli yükselen üçlü.
-    func success() {
-        play(tones: [Tone(freq: 660, dur: 0.07, gain: 0.18),
-                     Tone(freq: 880, dur: 0.07, gain: 0.18),
-                     Tone(freq: 1320, dur: 0.12, gain: 0.20)])
-    }
-
-    /// Çeyrek / büyük kapanış — başarıdan biraz daha tok, dört nota.
-    func close() {
-        play(tones: [Tone(freq: 523, dur: 0.08, gain: 0.18),
-                     Tone(freq: 659, dur: 0.08, gain: 0.18),
-                     Tone(freq: 784, dur: 0.08, gain: 0.18),
-                     Tone(freq: 1047, dur: 0.16, gain: 0.22)])
-    }
-
-    /// Funding turu / sezon finali / win — görkemli arpej (uzun finiş).
-    func celebrate() {
-        play(tones: [Tone(freq: 523, dur: 0.09, gain: 0.20),
-                     Tone(freq: 659, dur: 0.09, gain: 0.20),
-                     Tone(freq: 784, dur: 0.09, gain: 0.20),
-                     Tone(freq: 1047, dur: 0.10, gain: 0.22),
-                     Tone(freq: 1319, dur: 0.22, gain: 0.24)])
-    }
-
-    /// Kritik uyarı (düşük runway, istifa) — alçak iki nota (düşen).
-    func warning() {
-        play(tones: [Tone(freq: 440, dur: 0.10, gain: 0.18),
-                     Tone(freq: 330, dur: 0.14, gain: 0.18)])
-    }
-
-    /// İflas / başarısız sonuç — boğuk düşen üçlü.
-    func failure() {
-        play(tones: [Tone(freq: 392, dur: 0.12, gain: 0.20),
-                     Tone(freq: 294, dur: 0.14, gain: 0.20),
-                     Tone(freq: 196, dur: 0.26, gain: 0.22)])
-    }
-
-    // MARK: - Sentez
-
-    private struct Tone {
-        let freq: Double   // Hz
-        let dur: Double    // saniye
-        let gain: Double   // 0-1 tepe genlik
-    }
-
-    /// Toleranslı oynatma: engine hazırsa sentezlenmiş tonu çal, değilse sistem sesine düş.
-    private func play(tones: [Tone]) {
-        guard isEnabled else { return }
-        guard started, let format, let buffer = buffer(for: tones, format: format) else {
-            // Yedek: hafif sistem klik sesi (sentez kurulamadıysa).
-            AudioServicesPlaySystemSound(1104)
-            return
+    /// Müziği aç/kapa (kalıcı).
+    func setMusicEnabled(_ on: Bool) {
+        isMusicEnabled = on
+        UserDefaults.standard.set(on, forKey: musicKey)
+        if on {
+            startMusicIfNeeded()
+        } else {
+            musicPlayer?.pause()
         }
-        player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
     }
 
-    /// Ardışık tonları tek bir PCM buffer'a sentezle (her tonda kısa attack/decay zarfı).
-    private func buffer(for tones: [Tone], format: AVAudioFormat) -> AVAudioPCMBuffer? {
-        let totalDur = tones.reduce(0) { $0 + $1.dur }
-        let frameCount = AVAudioFrameCount(totalDur * sampleRate)
-        guard frameCount > 0,
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
-              let channel = buffer.floatChannelData?[0] else { return nil }
-        buffer.frameLength = frameCount
+    @discardableResult
+    func toggleMusic() -> Bool {
+        setMusicEnabled(!isMusicEnabled)
+        return isMusicEnabled
+    }
 
-        var frame = 0
-        for tone in tones {
-            let toneFrames = Int(tone.dur * sampleRate)
-            let twoPiF = 2.0 * Double.pi * tone.freq
-            // Yumuşak zarf: hızlı attack, üstel decay → "tık/çın" hissi (clicksiz).
-            let attack = Double(toneFrames) * 0.1
-            for n in 0..<toneFrames {
-                guard frame < Int(frameCount) else { break }
-                let t = Double(n) / sampleRate
-                let envelope: Double
-                if Double(n) < attack {
-                    envelope = Double(n) / max(1, attack)
-                } else {
-                    let p = Double(n - Int(attack)) / Double(max(1, toneFrames - Int(attack)))
-                    envelope = exp(-3.0 * p)
-                }
-                channel[frame] = Float(sin(twoPiF * t) * tone.gain * envelope)
-                frame += 1
+    // MARK: - Anlamsal efektler (Haptics.SFX çağırır)
+
+    /// İşe alım / eşya alımı / hafif onay.
+    func tap()       { play(.tap) }
+    /// Tab/seçim değişimi — çok kısa nötr tık.
+    func select()    { play(.select) }
+    /// Karar kartı geldi — dikkat çeken nota.
+    func decision()  { play(.decision) }
+    /// Günlük hedef / sprint başarısı.
+    func success()   { play(.success) }
+    /// Çeyrek/büyük kapanış.
+    func close()     { play(.close) }
+    /// Funding / sezon finali / win — görkemli.
+    func celebrate() { play(.celebrate) }
+    /// Kritik uyarı.
+    func warning()   { play(.warning) }
+    /// İflas / başarısız sprint.
+    func failure()   { play(.failure) }
+
+    // MARK: - Çalma çekirdeği
+
+    /// Round-robin oynatıcı havuzundan birini çal. Toggle kapalıysa veya
+    /// dosya bulunamadıysa sessizce çıkar.
+    private func play(_ fx: SFX) {
+        guard isEnabled else { return }
+        guard let pool = sfxPlayers[fx], !pool.isEmpty else { return }
+        let cursor = sfxCursor[fx] ?? 0
+        let player = pool[cursor % pool.count]
+        sfxCursor[fx] = (cursor + 1) % pool.count
+        // Aynı player tekrar çalıyorsa baştan başlasın (kısa SFX'lerde "kesme" hissi tutarlı).
+        if player.isPlaying { player.currentTime = 0 }
+        player.play()
+    }
+
+    /// Müziği çalmaya başla (henüz çalmıyorsa). Foreground değilse beklesin.
+    private func startMusicIfNeeded() {
+        guard musicReady, isMusicEnabled, isForeground, let p = musicPlayer else { return }
+        if !p.isPlaying { p.play() }
+    }
+
+    // MARK: - Yardımcılar
+
+    /// Bir SFX için varsayılan volume (her efekt kendi karakterine göre dengelenir).
+    private func defaultVolume(for fx: SFX) -> Float {
+        switch fx {
+        case .tap:       return 0.55   // hafif tık — bastırıcı olmasın
+        case .select:    return 0.45
+        case .decision:  return 0.75
+        case .success:   return 0.80
+        case .close:     return 0.75
+        case .celebrate: return 0.85   // ödül anı — biraz daha öne çık
+        case .warning:   return 0.75
+        case .failure:   return 0.80
+        }
+    }
+
+    /// `name` adlı ses dosyası için `count` adet önceden yüklenmiş AVAudioPlayer oluştur.
+    /// Bulunamayan/yüklenemeyen dosyalar boş havuzla döner (çalma sessizce yutulur).
+    private func preloadPlayers(named name: String, count: Int, volume: Float) -> [AVAudioPlayer] {
+        guard let url = audioURL(named: name) else { return [] }
+        var players: [AVAudioPlayer] = []
+        players.reserveCapacity(count)
+        for _ in 0..<count {
+            if let p = try? AVAudioPlayer(contentsOf: url) {
+                p.volume = volume
+                p.prepareToPlay()
+                players.append(p)
             }
         }
-        return buffer
+        return players
+    }
+
+    /// Bundle'dan bilinen ses uzantıları için dosya URL'si bul.
+    private func audioURL(named name: String) -> URL? {
+        for ext in ["wav", "m4a", "mp3", "caf", "aac"] {
+            if let url = Bundle.main.url(forResource: name, withExtension: ext) {
+                return url
+            }
+        }
+        return nil
     }
 }

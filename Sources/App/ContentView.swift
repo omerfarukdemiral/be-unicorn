@@ -144,10 +144,10 @@ struct ContentView: View {
             switch phase {
             case .active:
                 model.refreshOnForeground()
-                AudioManager.shared.resume()   // ses motorunu sürdür
+                AudioManager.shared.resume()   // arka plan müziğini sürdür
             case .background, .inactive:
                 model.saveOnBackground()
-                AudioManager.shared.pause()    // arka planda ses motorunu duraklat
+                AudioManager.shared.pause()    // arka planda müziği duraklat
             @unknown default: break
             }
         }
