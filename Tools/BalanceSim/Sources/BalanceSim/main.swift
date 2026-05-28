@@ -569,6 +569,174 @@ var AD_HEALTHY_LTV_CAC: Double = 3.0
 // Reklam bütçesini artırmak için gereken min runway (ay) — disiplinli kaldıraç.
 var AD_MIN_RUNWAY: Double = 4.0
 
+// =====================================================================
+// MARK: - Oyuncu arketipleri (madde C: 4 strateji politikası)
+// =====================================================================
+//
+// Aynı çekirdek ekonomi (Sim) üzerinde, farklı oyuncu stratejilerini koşturmak
+// için politika parametre setleri. Tasarım Prensibi: "her arketip Unicorn'a
+// varabilmeli, hiçbiri diğerine kesin baskın olmamalı".
+//
+//   1) BOOTSTRAP-FRUGAL — yatırım turu REDDET (raise=false), düşük headcount,
+//      yüksek itibar+organik büyüme, reklam yok/minimal. Yavaş ama bağımsız.
+//   2) VC-ROKET — her tur kapanır kapanmaz topla, agresif hire + reklam,
+//      runway koştur. Hızlı ama kırılgan.
+//   3) NİŞ UZMAN — az çalışan (mühendislik + ürün + ops odaklı), churn↓,
+//      ARPU↑ (Premium modülü erken), reklam orta, organik+itibar.
+//   4) PLATFORM GENİŞ — çok çalışan dağıtık (engineering+marketing yüksek),
+//      kullanıcı patlat, ARPU düşük, modüller geniş.
+//
+// Politika parametreleri:
+
+enum Archetype: String, CaseIterable {
+    case bootstrap = "Bootstrap-Frugal"
+    case vcRocket  = "VC-Roket"
+    case niche     = "Niş Uzman"
+    case platform  = "Platform Geniş"
+}
+
+struct Policy {
+    /// Kalan nakitin burn'ün kaç katı altına inmesine izin verilmez (harcama tamponu).
+    var minRunway: Double
+    /// Bootstrap'ta nakit tampon çarpanı (burn × buffer).
+    var bootstrapBufferMult: Double
+    /// Reklam bütçesini AÇIK tut.
+    var adEnabled: Bool
+    /// Reklam için minimum sağlıklı LTV:CAC eşiği.
+    var adHealthyLtvCac: Double
+    /// Reklam yeniden-yatırım oran tabanı (kârın bu kadarı reklama; 0..1).
+    var adReinvestBase: Double
+    /// Reklam yeniden-yatırım tavanı (0..1).
+    var adReinvestCap: Double
+    /// Reklam erken aşamada açılsın mı (stage>=1 yerine stage>=N).
+    var adMinStage: Int
+    /// Funding turu kapanır kapanmaz al (false = reddet, sadece organik nakitle ilerle).
+    var raiseRounds: Bool
+    /// Sadece BU evreye kadar tur al (geri kalanını reddet). nil = sınırsız.
+    var maxStageToRaise: Int?
+    /// Departman önceliği (bootstrap mod ve afford'da bu sırayla tercih).
+    /// İlk eleman en yüksek öncelik. Pazarlamaya yetişen-dev mantığı yine devrede.
+    var hirePriorityOrder: [Int]
+    /// Departman başına headcount tavanı (bütçeleme/yapısal sınır). nil = sınırsız.
+    var headcountCap: [Int?]
+    /// Modül satın alma önceliği (geçen sırayla).
+    var moduleBuyOrder: [Int]
+    /// Modül erken erişim kilidi bypass etmez; ama hangileri öncelikle alınır.
+    /// Modül başına satın alma tavanı (default: doğal max). nil = doğal.
+    var moduleLevelCap: [Int?]
+    /// Bootstrap-frugal modunda payback yerine "organik büyüme + itibar" stratejisi tercih edilsin.
+    var preferOrganic: Bool
+    /// Niş Uzman: ARPU/churn modüllerini ÖNCE yığ.
+    var nicheFocus: Bool
+    /// Platform Geniş: çalışan sayısını ÇOK tut (rakam üst sınır gevşek + dağıtık hire).
+    var platformBreadth: Bool
+
+    static let defaultPolicy = Policy(
+        minRunway: 2.0,
+        bootstrapBufferMult: 1.5,
+        adEnabled: true,
+        adHealthyLtvCac: 3.0,
+        adReinvestBase: 0.40,
+        adReinvestCap: 0.85,
+        adMinStage: 1,
+        raiseRounds: true,
+        maxStageToRaise: nil,
+        hirePriorityOrder: [2, 0, 3, 1, 4],
+        headcountCap: Array(repeating: nil, count: Balance.departmentCount),
+        moduleBuyOrder: [1, 2, 0, 6, 7, 3, 4, 5],
+        moduleLevelCap: Array(repeating: nil, count: Balance.modules.count),
+        preferOrganic: false,
+        nicheFocus: false,
+        platformBreadth: false
+    )
+
+    static func policy(for arch: Archetype) -> Policy {
+        var p = defaultPolicy
+        switch arch {
+        case .bootstrap:
+            // Bağımsız + yavaş. Tur al ama "agresif değil"; reklam minimal; az çalışan.
+            // Çekirdek: yüksek itibar + organik büyüme + moral/ARPU modülleri ile
+            // birim ekonomiyi kasla. Yavaş ama varır (~%30-50 daha uzun bekleniyor).
+            p.minRunway = 2.5
+            p.bootstrapBufferMult = 1.8        // sıkı (kasalı oyuncu)
+            p.adEnabled = true
+            p.adHealthyLtvCac = 4.0            // çok sağlıklı birim ekonomi gerekli
+            p.adReinvestBase = 0.20            // hafif kaldıraç (kârı dağıtmaz)
+            p.adReinvestCap = 0.40
+            p.adMinStage = 2                   // Seed'e kadar reklam YOK (organik+itibar)
+            p.raiseRounds = true
+            p.maxStageToRaise = nil            // tüm turları al (ama az çalışan + az reklam)
+            // Büyüme için pazarlama gerekli ama abartılmasın; modüllerle organik patlat.
+            p.hirePriorityOrder = [2, 0, 1, 4, 3]   // pazarlama (büyüme başlasın) sonra dev
+            // "Az çalışan" disiplini: mühendislik kapasite için yeterli, pazarlama az
+            // (organik+itibara güven), satış+ops orta (ARPU+churn için kritik). Pazarlama
+            // SIKI tut → kullanıcı kapasiteyi aşmasın, churn patlamasın.
+            p.headcountCap = [42, 22, 12, 22, 24]
+            // Modül: moral (üretim), ARPU (premium), churn (ops), verim, sonra büyüme
+            p.moduleBuyOrder = [4, 2, 3, 0, 5, 6, 7, 1]
+            p.preferOrganic = true
+        case .vcRocket:
+            // Agresif: her tur kapanır kapanmaz al, reklam erken/yüksek, runway koştur.
+            // Buffer 1.3 — agresif ama iflas-uçurumundan biraz uzak. Tur sermayesiyle
+            // pazarlama+dev'i çok hızlı şişir; sales/ops geç-oyunda ARPU/churn için.
+            p.minRunway = 1.3
+            p.bootstrapBufferMult = 1.4
+            p.adEnabled = true
+            p.adHealthyLtvCac = 2.0          // marjinal birim ekonomide bile gaza bas
+            p.adReinvestBase = 0.80
+            p.adReinvestCap = 0.95
+            p.adMinStage = 1                 // Pre-seed'den itibaren bütçe aç
+            p.raiseRounds = true
+            p.maxStageToRaise = nil
+            p.hirePriorityOrder = [2, 0, 1, 3, 4]   // pazarlama+dev önce, ürün sonra
+            p.headcountCap = Array(repeating: nil, count: Balance.departmentCount)
+            p.moduleBuyOrder = [1, 2, 0, 3, 6, 7, 4, 5]   // büyüme modülü önce
+        case .niche:
+            // Az ama derin ekip. Premium fiyatlama (ARPU↑), churn↓, kalite önce.
+            // Tur al ama yavaş büyü; pazarlama AZ (premium = az ama derin kullanıcı);
+            // satış+ops YÜKSEK (ARPU↑ + churn↓). Az kullanıcıyla yüksek MRR.
+            p.minRunway = 2.5
+            p.bootstrapBufferMult = 1.6
+            p.adEnabled = true
+            p.adHealthyLtvCac = 3.5
+            p.adReinvestBase = 0.35
+            p.adReinvestCap = 0.60
+            p.adMinStage = 2             // Seed sonrası reklam aç (ARPU önce kasla)
+            p.raiseRounds = true
+            p.maxStageToRaise = nil
+            // ÖNCE: pazarlama (büyüme başlasın), ürün (kalite), satış (ARPU), ops, dev en son.
+            // Satışı önceden alarak ARPU karakteri öne çıkar.
+            p.hirePriorityOrder = [2, 1, 3, 4, 0]
+            // Pazarlama SIKI (premium = az kullanıcı), satış+ops yüksek (ARPU + churn↓)
+            p.headcountCap = [30, 35, 14, 50, 38]
+            // Modül: Premium Paket (ARPU) + Müşteri Başarısı (churn) + Kültür (moral)
+            p.moduleBuyOrder = [2, 3, 4, 0, 5, 6, 7, 1]
+            p.nicheFocus = true
+        case .platform:
+            // Çok çalışan, geniş büyüme, ARPU düşük ama hacimle telafi. Tüm modüller dolu.
+            p.minRunway = 2.0
+            p.bootstrapBufferMult = 1.4
+            p.adEnabled = true
+            p.adHealthyLtvCac = 2.8
+            p.adReinvestBase = 0.55
+            p.adReinvestCap = 0.80
+            p.adMinStage = 1
+            p.raiseRounds = true
+            p.maxStageToRaise = nil
+            // Mühendislik+Pazarlama yüksek; tüm departmanlar dağıtık (sırayla)
+            p.hirePriorityOrder = [2, 0, 1, 4, 3]
+            p.headcountCap = Array(repeating: nil, count: Balance.departmentCount)
+            // Büyüme + verim modülleri önde, ARPU geride (platform = düşük ARPU)
+            p.moduleBuyOrder = [1, 0, 6, 7, 4, 3, 2, 5]
+            p.platformBreadth = true
+        }
+        return p
+    }
+}
+
+/// Aktif politika (mutasyon kolaylığı için global). Her arketip koşusunda set edilir.
+var ACTIVE_POLICY: Policy = .defaultPolicy
+
 /// Akıllı oyuncunun reklam bütçesi kararı (kârı büyümeye geri yatırma mantığı).
 ///
 /// Reklam, sürdürülebilir bir KÂR FAZLASINDAN finanse edilir: birim ekonomi
@@ -579,7 +747,10 @@ var AD_MIN_RUNWAY: Double = 4.0
 ///     erken harcama cezalandırılır.
 @discardableResult
 func adBudgetStep(_ s: Sim) -> Bool {
-    guard AD_BUDGET_ENABLED else {
+    // Arketip-duyarlı: ACTIVE_POLICY'den bütçe parametrelerini al.
+    let pol = ACTIVE_POLICY
+    let enabled = AD_BUDGET_ENABLED && pol.adEnabled
+    guard enabled else {
         if s.adBudgetPerMonth > 0 { s.adBudgetPerMonth = 0; return true }
         return false
     }
@@ -605,28 +776,26 @@ func adBudgetStep(_ s: Sim) -> Bool {
         }
         return false
     }
-    // Erken evrede (Garaj) reklam gazlamak ölümcül: ilk tur (Pre-seed) alınana ve
-    // gerçek bir kâr fazlası oluşana dek reklam bütçesi AÇMA — aşırı erken harcama
-    // cezalandırılır. Disiplinli oyuncu önce sürdürülebilir ekonomi kurar.
-    guard s.stage >= 1 else {
+    // Erken evrede reklam gazlamak ölümcül: arketip'in adMinStage'ine kadar bekle.
+    guard s.stage >= pol.adMinStage else {
         if s.adBudgetPerMonth > 0 { s.adBudgetPerMonth = 0; return true }
         return false
     }
-    // Hedef bütçe: birim ekonomi ne kadar sağlıklıysa çekirdek kârın o kadar
-    // büyük bir oranını reklama ayır (oran 3'te %40, çok sağlıklıda %85'e kadar).
-    guard coreNet > 0, ratio >= AD_HEALTHY_LTV_CAC else {
-        // henüz kârlı değil ama ekonomi iyi: küçük bir tohum bütçe (cash bolsa).
-        if s.adBudgetPerMonth == 0 && s.cash > s.burnPerMonth * 4 && ratio >= AD_HEALTHY_LTV_CAC {
+    // Hedef bütçe: birim ekonomi sağlıklıysa çekirdek kârın bir oranını reklama ayır.
+    // Arketipe göre taban/tavan ve eşik farklı (bootstrap düşük, VC-roket yüksek).
+    let healthy = pol.adHealthyLtvCac
+    guard coreNet > 0, ratio >= healthy else {
+        if s.adBudgetPerMonth == 0 && s.cash > s.burnPerMonth * 4 && ratio >= healthy {
             s.adBudgetPerMonth = step
             return true
         }
         return false
     }
-    let reinvestFrac = min(0.85, 0.40 + (ratio - AD_HEALTHY_LTV_CAC) * 0.05)
+    let reinvestFrac = min(pol.adReinvestCap, pol.adReinvestBase + (ratio - healthy) * 0.05)
     let target = coreNet * reinvestFrac
     let diff = target - s.adBudgetPerMonth
     if diff > step * 0.5 {
-        s.adBudgetPerMonth += min(step, diff)   // hedefe doğru bir adım
+        s.adBudgetPerMonth += min(step, diff)
         return true
     } else if diff < -step * 0.5 {
         s.adBudgetPerMonth = max(0, s.adBudgetPerMonth - min(step, -diff))
@@ -638,10 +807,30 @@ func adBudgetStep(_ s: Sim) -> Bool {
 /// Tek bir akıllı satın alma adımı. Aldıysa true.
 @discardableResult
 func smartBuyStep(_ s: Sim) -> Bool {
-    // Tur toplanabiliyorsa önce onu al (bedava nakit + evre ilerlemesi).
-    if s.canRaise { s.raiseRound(); return true }
+    let pol = ACTIVE_POLICY
+    // Tur toplanabiliyorsa önce onu al — ama arketip izin veriyorsa ve maxStage'i aşmıyorsa.
+    if s.canRaise && pol.raiseRounds {
+        if let cap = pol.maxStageToRaise, s.stage >= cap {
+            // Bu evre tavanından sonra tur reddedilir (Bootstrap-Frugal: kurucu hisseyi koru)
+        } else {
+            s.raiseRound()
+            return true
+        }
+    }
 
-    let affordable = s.bestActions()
+    // Headcount tavanı + modül seviye tavanı filtreleri.
+    let actions = s.bestActions().filter { act in
+        switch act.kind {
+        case .hire:
+            if let cap = pol.headcountCap[act.index], s.headcount[act.index] >= cap { return false }
+            return true
+        case .module:
+            if let cap = pol.moduleLevelCap[act.index], s.moduleLevels[act.index] >= cap { return false }
+            return true
+        }
+    }
+
+    let affordable = actions
         .filter { $0.cost <= s.cash && $0.deltaNetPerMonth > 0 }
         .filter { runwayAfter(spending: $0.cost, s) >= MIN_RUNWAY }
         .sorted { $0.payback < $1.payback }
@@ -664,28 +853,31 @@ var BOOTSTRAP_BUFFER_MULT: Double = 1.5
 
 @discardableResult
 func bootstrapStep(_ s: Sim) -> Bool {
+    let pol = ACTIVE_POLICY
     let buffer = BOOTSTRAP_BUFFER_MULT <= 0 ? 0 : max(2_000, s.burnPerMonth * BOOTSTRAP_BUFFER_MULT)
 
-    // Kapasite/kalite dengesi: devPower (mühendislik) kapasiteyi VE ürün
-    // kalitesini (CAC/organik) belirler. Pazarlamayı dev'le orantılı tut —
-    // aksi halde kapasite dolar, churn patlar, kalite çöker. Hedef: ~2 pazarlama
-    // başına 1 dev. Kapasiteye yakınsak veya dev az ise önce dev.
+    // Kapasite/kalite dengesi: dev pazarlamaya yetişmek zorunda (her arketipte).
     let devCount = s.headcount[0]
     let mktCount = s.headcount[2]
     let nearCapacity = s.users >= s.userCapacity * 0.75
-    let devStarved = devCount * 2 < mktCount + 1   // dev pazarlamaya yetişemiyor
+    let devStarved = devCount * 2 < mktCount + 1
     let order: [Int]
     if nearCapacity || devStarved {
-        order = [0, 1, 2, 3, 4]      // kapasite/kalite önce
+        // Kapasite/kalite önce: dev, ürün, sonra arketipin önceliği
+        var cap: [Int] = [0, 1]
+        cap.append(contentsOf: pol.hirePriorityOrder.filter { $0 != 0 && $0 != 1 })
+        order = cap
     } else {
-        order = [2, 0, 3, 1, 4]      // büyüme önce
+        order = pol.hirePriorityOrder
     }
     for i in order {
+        if let cap = pol.headcountCap[i], s.headcount[i] >= cap { continue }
         let c = s.hireCost(i)
         if s.cash - c >= buffer { return s.hire(i) }
     }
-    // Modüller: büyüme/ARPU + yeni gider-azaltma modülleri (6 bulut, 7 kira).
-    for i in [1, 2, 0, 6, 7, 3, 4, 5] where s.canBuyModule(i) {
+    // Modüller: arketipin sıralamasıyla al.
+    for i in pol.moduleBuyOrder where s.canBuyModule(i) {
+        if let cap = pol.moduleLevelCap[i], s.moduleLevels[i] >= cap { continue }
         let c = s.moduleCost(i)
         if s.cash - c >= buffer { return s.buyModule(i) }
     }
@@ -814,9 +1006,14 @@ final class Runner {
         advanceRetention()
 
         // Akıllı oyuncu: önce reklam bütçesi kararı, sonra satın almalar.
+        // Tick başına en fazla N aksiyon — gerçek oyuncu 0.1 sn'de düzinelerce
+        // satın alma yapmaz ve her aksiyon sonrası ekonominin "tepkimesini" görmek
+        // için bir sonraki tick'i bekler. N=2 (raise + 1 hire/modül tek frame'de OK).
         adBudgetStep(s)
-        var g = 0
-        while smartBuyStep(s) { g += 1; if g > 5000 { break } }
+        let actionsPerTick = 2
+        for _ in 0..<actionsPerTick {
+            if !smartBuyStep(s) { break }
+        }
 
         elapsed += dt
         record()
@@ -1083,3 +1280,171 @@ if naive.bankrupt {
     print("  -> Ne iflas ne Unicorn (6 saat sınırı)")
 }
 print("  -> naive zirve reklam bütçesi: \(dollars(naive.peakAdBudget))/ay, son nakit: \(dollars(naive.s.cash))")
+
+// Naive testinden çıkışta globalleri varsayılana sıfırla (arketip testleri için temiz başlangıç).
+MIN_RUNWAY = 2.0
+BOOTSTRAP_BUFFER_MULT = 1.5
+AD_HEALTHY_LTV_CAC = 3.0
+AD_MIN_RUNWAY = 4.0
+AD_BUDGET_ENABLED = true
+RETENTION_REWARDS_ENABLED = true
+
+// =====================================================================
+// MARK: (i) 4 oyuncu arketipi — Çoklu Yol doğrulaması
+// =====================================================================
+// Tasarım Prensibi: 4 strateji arketipi de Garaj→Unicorn'a varabilmeli.
+// Hiçbiri "açıkça en iyi" olmamalı; farklı dengelerle aynı hedefe ulaşmalılar.
+//
+//   - Bootstrap-Frugal: Pre-seed dışında tur YOK, az çalışan, düşük reklam → yavaş.
+//   - VC-Roket        : Her tur kapanır kapanmaz al, agresif hire+reklam → hızlı.
+//   - Niş Uzman       : Az ama derin ekip, Premium/Churn modülleri önde → orta.
+//   - Platform Geniş  : Geniş ekip, büyüme + verim modülleri önde, ARPU düşük → orta-hızlı.
+
+struct ArchetypeReport {
+    let arch: Archetype
+    let bankrupt: Bool
+    let bankruptTime: Double
+    let unicornTime: Double?      // saniye
+    let finalUsers: Double
+    let finalMrr: Double
+    let finalArpu: Double
+    let finalChurn: Double
+    let finalReputation: Double
+    let finalMorale: Double
+    let finalLtvCac: Double
+    let totalHires: Int
+    let founderEquity: Double
+    let peakAdBudget: Double
+    let cumulativeAdSpend: Double
+    let cumulativePaidUsers: Double
+    let cumulativeOrganicUsers: Double
+    let stageReachTime: [Int: Double]
+    let headcount: [Int]
+    let moduleLevels: [Int]
+}
+
+func runArchetype(_ arch: Archetype) -> ArchetypeReport {
+    ACTIVE_POLICY = Policy.policy(for: arch)
+    MIN_RUNWAY = ACTIVE_POLICY.minRunway
+    BOOTSTRAP_BUFFER_MULT = ACTIVE_POLICY.bootstrapBufferMult
+    AD_HEALTHY_LTV_CAC = ACTIVE_POLICY.adHealthyLtvCac
+    AD_BUDGET_ENABLED = ACTIVE_POLICY.adEnabled
+    RETENTION_REWARDS_ENABLED = true   // retention herkes için açık (gerçek oyuncu)
+    let r = Runner()
+    r.run(maxSeconds: 6 * 3600)
+    return ArchetypeReport(
+        arch: arch,
+        bankrupt: r.bankrupt,
+        bankruptTime: r.bankruptTime,
+        unicornTime: r.stageReachTime[Balance.stageCount - 1],
+        finalUsers: r.s.users,
+        finalMrr: r.s.mrr,
+        finalArpu: r.s.arpu,
+        finalChurn: r.s.churnRate,
+        finalReputation: r.s.reputation,
+        finalMorale: r.s.morale,
+        finalLtvCac: r.s.ltvCacRatio,
+        totalHires: r.s.totalHires,
+        founderEquity: r.s.founderEquity,
+        peakAdBudget: r.peakAdBudget,
+        cumulativeAdSpend: r.cumulativeAdSpend,
+        cumulativePaidUsers: r.cumulativePaidUsers,
+        cumulativeOrganicUsers: r.cumulativeOrganicUsers,
+        stageReachTime: r.stageReachTime,
+        headcount: r.s.headcount,
+        moduleLevels: r.s.moduleLevels
+    )
+}
+
+print("\n==========================================================")
+print(" (i) 4 OYUNCU ARKETIPI — Çoklu Yol Doğrulaması")
+print("==========================================================")
+
+var reports: [ArchetypeReport] = []
+for arch in Archetype.allCases {
+    reports.append(runArchetype(arch))
+}
+
+print("\n  arketip          | Unicorn | iflas? | son kullanıcı | MRR/ay  | ARPU  | churn | itibar | LTV:CAC | hisse% | toplam işe alım")
+for r in reports {
+    let uniStr: String
+    if r.bankrupt { uniStr = "İFLAS@" + mmss(r.bankruptTime) }
+    else if let t = r.unicornTime { uniStr = mmss(t) }
+    else { uniStr = "—" }
+    let line = "  \(pad(r.arch.rawValue, 16)) | "
+        + "\(pad(uniStr, 7)) | "
+        + "\(pad(r.bankrupt ? "EVET" : "hayır", 6)) | "
+        + "\(pad(fmt(r.finalUsers), 13)) | "
+        + "\(pad(dollars(r.finalMrr), 7)) | "
+        + "\(pad(dollars(r.finalArpu), 5)) | "
+        + "\(pad(String(format: "%.1f%%", r.finalChurn * 100), 5)) | "
+        + "\(pad(String(format: "%.0f", r.finalReputation), 6)) | "
+        + "\(pad(String(format: "%.1f", r.finalLtvCac), 7)) | "
+        + "\(pad(String(format: "%.0f%%", r.founderEquity * 100), 6)) | "
+        + "\(r.totalHires)"
+    print(line)
+}
+
+// Detaylı her arketip profili
+for r in reports {
+    print("\n--- \(r.arch.rawValue) ---")
+    if r.bankrupt {
+        print("  İFLAS @ \(mmss(r.bankruptTime)) — Unicorn'a varılamadı.")
+        continue
+    }
+    if let t = r.unicornTime {
+        print("  Unicorn: \(mmss(t)) (\(mins(t)), \(String(format: "%.0f", gameMonths(t))) oyun-ayı)")
+    } else {
+        print("  Unicorn'a 6 saatte ulaşılamadı (max sim süresi).")
+    }
+    // funding aralıkları
+    var prev: Double = 0
+    print("  evre süreleri:")
+    for stg in Balance.stages where stg.id > 0 {
+        if let t = r.stageReachTime[stg.id] {
+            let iv = t - prev
+            prev = t
+            print("    -> \(pad(stg.name, 11)) @ \(pad(mmss(t), 14)) (+\(mmss(iv)))")
+        } else {
+            print("    -> \(pad(stg.name, 11)) ULAŞILAMADI")
+        }
+    }
+    print("  departman headcount:", terminator: " ")
+    for i in 0..<Balance.departmentCount {
+        let d = Balance.departments[i]
+        print("\(d.name): \(r.headcount[i])", terminator: (i < Balance.departmentCount - 1 ? " | " : ""))
+    }
+    print("")
+    print("  modül seviyeleri  :", terminator: " ")
+    for i in 0..<Balance.modules.count {
+        let m = Balance.modules[i]
+        print("\(m.name): \(r.moduleLevels[i])/\(m.maxLevel)", terminator: (i < Balance.modules.count - 1 ? " | " : ""))
+    }
+    print("")
+    let totalAcq = r.cumulativePaidUsers + r.cumulativeOrganicUsers
+    let paidPct = totalAcq > 0 ? r.cumulativePaidUsers / totalAcq * 100 : 0
+    print("  edinme dağılımı   : ücretli %\(String(format: "%.0f", paidPct)) / organik %\(String(format: "%.0f", 100 - paidPct)) | toplam reklam harcaması \(dollars(r.cumulativeAdSpend)) | zirve bütçe \(dollars(r.peakAdBudget))/ay")
+    print("  birim ekonomi     : ARPU \(dollars(r.finalArpu)) | churn \(String(format: "%.1f%%", r.finalChurn * 100)) | LTV:CAC \(String(format: "%.1f", r.finalLtvCac))")
+    print("  insan & moral     : toplam işe alım \(r.totalHires), moral \(String(format: "%.0f", r.finalMorale)), itibar \(String(format: "%.0f", r.finalReputation)), hisse %\(String(format: "%.0f", r.founderEquity * 100))")
+}
+
+// Çoklu Yol Doğrulaması özeti
+print("\n=== ÇOKLU YOL DOĞRULAMASI ===")
+let successful = reports.filter { !$0.bankrupt && $0.unicornTime != nil }
+print("  Unicorn'a varan arketip: \(successful.count) / \(reports.count)")
+let times = successful.compactMap { $0.unicornTime }
+if !times.isEmpty {
+    let fastest = times.min()!
+    let slowest = times.max()!
+    let ratio = slowest / fastest
+    print("  En hızlı: \(mmss(fastest)) | En yavaş: \(mmss(slowest)) | yavaş/hızlı oranı: \(String(format: "%.2fx", ratio))")
+    print("  Sağlıklı bant (hedef): tüm arketipler Unicorn'a varır, oran <~ 2.0x (hiçbiri ezici değil).")
+    if ratio < 2.0 {
+        print("  -> DENGE TAMAM ✅ (4 yol meşru ve eşit-değerli)")
+    } else {
+        print("  -> DENGE ZAYIF (kalibrasyon gerekli — en yavaş yol \(String(format: "%.1fx", ratio)) daha uzun)")
+    }
+}
+if reports.contains(where: { $0.bankrupt }) {
+    print("  UYARI: İflas eden arketip(ler) var — politika ya da Balance kalibrasyonu gerekli.")
+}

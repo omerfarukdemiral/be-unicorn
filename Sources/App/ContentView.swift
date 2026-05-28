@@ -152,6 +152,14 @@ struct ContentView: View {
             .animation(.spring(response: 0.6, dampingFraction: 0.78).delay(0.18),
                        value: introAppeared)
 
+            // HUD nakit rozeti yakınında yüzen ±tutar çipi (kazanç/harcama geri bildirimi).
+            // Üst sol köşede; HUD'un eyebrow + cash badge satırı hizasının hemen sağı.
+            CashDeltaOverlay(model: model)
+                .padding(.leading, 110)
+                .padding(.top, 48)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .allowsHitTesting(false)
+
             overlays
         }
         .onAppear {

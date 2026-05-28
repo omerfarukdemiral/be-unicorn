@@ -89,7 +89,6 @@ struct HUDView: View {
                     .stroke(theme.accent.opacity(0.4), lineWidth: 1.8)
             )
             .shadow(color: .black.opacity(0.45), radius: 12, x: 0, y: 7)
-            .shadow(color: theme.accent.opacity(0.18), radius: 20, x: 0, y: 0)
             .frame(height: 78)
     }
 
@@ -122,7 +121,7 @@ struct HUDView: View {
                     )
                     .frame(width: 50, height: 50)
                     .overlay(Circle().stroke(.white.opacity(0.45), lineWidth: 2))
-                    .shadow(color: leagueColor.opacity(0.55), radius: 7, y: 3)
+                    .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
                 // İç avatar (kurucu glyph).
                 Circle()
                     .fill(theme.surfaceElevated)
@@ -140,7 +139,6 @@ struct HUDView: View {
                     Image(systemName: "crown.fill")
                         .font(.system(size: 11, weight: .black))
                         .foregroundStyle(Palette.gold)
-                        .shadow(color: Palette.gold.opacity(0.65), radius: 4)
                         .offset(y: -3)
                     Spacer()
                 }
@@ -155,7 +153,7 @@ struct HUDView: View {
                             Circle().fill(Palette.gold)
                                 .frame(width: 19, height: 19)
                                 .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1.4))
-                                .shadow(color: Palette.gold.opacity(0.55), radius: 4, y: 1)
+                                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
                             Text("\(model.leagueTier + 1)")
                                 .font(.appNumber(11, .black))
                                 .foregroundStyle(.black.opacity(0.82))
@@ -196,8 +194,9 @@ struct HUDView: View {
             Capsule().stroke(negative ? Palette.danger.opacity(0.55) : .white.opacity(0.18),
                              lineWidth: 1.4)
         )
-        .shadow(color: negative ? Palette.danger.opacity(pulse ? 0.5 : 0.18) : .black.opacity(0.3),
-                radius: negative && pulse ? 9 : 4, y: 2)
+        // Negatif nakit: yumuşatılmış kırmızı nabız (eskisinden ~40% düşük yoğunluk).
+        .shadow(color: negative ? Palette.danger.opacity(pulse ? 0.3 : 0.1) : .black.opacity(0.3),
+                radius: negative && pulse ? 11 : 4, y: 2)
     }
 
     /// Altta küçük net "+$X/ay" pill (pozitifse yeşil, negatifse kırmızı).
@@ -220,7 +219,7 @@ struct HUDView: View {
         .padding(.horizontal, Space.s2).padding(.vertical, 2.5)
         .background(Capsule().fill(color))
         .overlay(Capsule().stroke(.white.opacity(0.45), lineWidth: 1.1))
-        .shadow(color: color.opacity(0.5), radius: 4, y: 2)
+        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
     }
 
     // MARK: - CENTER: moral + kullanıcı
@@ -247,7 +246,7 @@ struct HUDView: View {
         .padding(.horizontal, Space.s2).padding(.vertical, 3)
         .background(Capsule().fill(theme.surfaceHigh))
         .overlay(Capsule().stroke(moraleColor.opacity(0.5), lineWidth: 1.3))
-        .shadow(color: moraleColor.opacity(0.25), radius: 4, y: 2)
+        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
         .overlay(alignment: .topTrailing) {
             if moraleCritical {
                 Circle().fill(Palette.danger)
@@ -274,7 +273,7 @@ struct HUDView: View {
         .padding(.horizontal, Space.s2).padding(.vertical, 2.5)
         .background(Capsule().fill(theme.surfaceHigh))
         .overlay(Capsule().stroke(theme.accent.opacity(0.45), lineWidth: 1.1))
-        .shadow(color: theme.accent.opacity(0.18), radius: 3, y: 2)
+        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
     }
 
     // MARK: - RIGHT: zaman + takvim + dişli
@@ -327,7 +326,6 @@ struct HUDView: View {
             .background(
                 Capsule()
                     .fill(active ? tint : .clear)
-                    .shadow(color: active ? tint.opacity(0.5) : .clear, radius: 4, y: 1)
             )
         }
         .buttonStyle(.pressable)

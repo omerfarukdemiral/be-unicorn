@@ -55,6 +55,7 @@ struct CycleReviewView: View {
                     scorecard
                     cohortStandings
                     leagueMovement
+                    coachingNote
 
                     Button { Haptics.tap(); model.startNextQuarter() } label: {
                         Text("Yeni Çeyrek").font(.bodyL)
@@ -187,6 +188,74 @@ struct CycleReviewView: View {
         : (demoted ? "arrow.down.circle.fill" : "arrow.right.circle.fill")
     }
 
+    // MARK: Koçluk yorumu — kural-tabanlı, suçlayıcı değil, "şunu da deneyebilirsin" tonu.
+    /// Skor + delta'lar + lig hareketinden 1-2 cümlelik koçluk notu seçer.
+    /// "Tek doğru yol yok" felsefesine sadık — çoğu yorumda alternatif yol ima edilir.
+    private var coachingText: String {
+        let s = review.breakdown.score
+        let users = review.breakdown.userGrowthPct
+        let mrr = review.breakdown.mrrGrowthPct
+        let morale = review.breakdown.avgMorale
+        let decisions = review.breakdown.decisionsMade
+
+        // Lig içinde sıralaman düştü + alt yarıda → rakip baskısı.
+        if demoted || (review.standings.count > 0 && review.playerRank > review.standings.count / 2 + 1) {
+            return "Kohortun alt yarısındasın; rakiplerin agresif. Hangi mekanikte geride kaldığını düşün — bazen savunma (churn/moral) saldırıdan (büyüme) önce gelir."
+        }
+        // Skor ≥ 80 + güçlü kullanıcı büyümesi → büyüme sürdürülebilirlik uyarısı.
+        if s >= 80 && users >= 25 {
+            return "Güçlü çeyrek. Bu hızla devam edersen LTV:CAC sağlığını da takip et — büyüme tek başına sürdürülebilir değil."
+        }
+        // Yüksek skor ama moral düşük → ekibi tüketme uyarısı.
+        if s >= 70 && morale < 50 {
+            return "Sayılar iyi ama ekibin yorgun. Bir sonraki çeyrekte moral yatırımı yapmak da meşru bir yol — ürünü kuran insanlar."
+        }
+        // Orta skor + MRR sabit → büyüme yatırımı önerisi (alternatif yol vurgulu).
+        if s >= 50 && s < 80 && abs(mrr) < 10 {
+            return "Stabil ama gelir büyümüyor. Belki pazarlamaya, belki ürün derinliğine yatırım zamanı — tek doğru cevap yok, kendi tezini test et."
+        }
+        // Düşük karar sayısı → daha aktif oyna ipucu.
+        if decisions <= 1 && s < 70 {
+            return "Bu çeyrekte az karar aldın. Daha aktif bir tempo dene — ya da bilinçli olarak sade kal; ikisi de geçerli bir strateji."
+        }
+        // Düşük skor + düşük moral → kriz öncesi toparlanma.
+        if s < 50 && morale < 50 {
+            return "Zor çeyrek. Krize girmeden ekibin moralini önce topla — bir sonraki sprintte küçük bir zafer kovala, momentum kıymetli."
+        }
+        // Düşük skor ama moral hâlâ ayakta → uzun vade umutlu.
+        if s < 50 {
+            return "Sayılar düşük ama oyun bitmedi. Bu çeyrekteki en küçük başarını al, üstüne kur — başarısızlık da bir bilgi parçası."
+        }
+        // Terfi + iyi skor → kutlama + bir sonraki seviye uyarısı.
+        if promoted {
+            return "Üst lige çıkıyorsun; rakipler daha sert olacak. Aynı oyunu oynamak yerine bir mekaniği daha derinleştirmeyi düşün."
+        }
+        // Default: stabil, lig korundu.
+        return "Ligini korudun. Bir sonraki çeyrekte farklı bir strateji denemek de bir yol — aynı planı sıkılaştırmak da. İkisi de meşru."
+    }
+
+    private var coachingNote: some View {
+        HStack(alignment: .top, spacing: Space.s2) {
+            Image(systemName: "lightbulb.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(theme.accent)
+                .frame(width: 18)
+                .padding(.top, 1)
+            Text(coachingText)
+                .font(.appText(13, .medium))
+                .foregroundStyle(theme.textSecondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Space.s3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.m)
+                .stroke(theme.accent.opacity(0.25), lineWidth: 1)
+        )
+    }
+
     private func pct(_ v: Double) -> String {
         let sign = v >= 0 ? "+" : ""
         return "\(sign)%\(Int(v.rounded()))"
@@ -209,7 +278,7 @@ struct LeagueBadge: View {
                     .frame(width: 52, height: 52)
                     .overlay(Circle().stroke(color.opacity(highlight ? 0.9 : 0.5),
                                              lineWidth: highlight ? 2 : 1))
-                    .shadow(color: highlight ? color.opacity(0.5) : .clear, radius: 10)
+                    .shadow(color: highlight ? color.opacity(0.3) : .clear, radius: 7)
                 Image(systemName: league.icon)
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(color)

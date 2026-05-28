@@ -112,7 +112,6 @@ struct OfficePanel: View {
                         .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .frame(width: 40, height: 40)
                         .rotationEffect(.degrees(-90))
-                        .shadow(color: tint.opacity(0.5), radius: 4)
 
                     // Orta ikon.
                     Image(systemName: icon)
@@ -128,7 +127,7 @@ struct OfficePanel: View {
                                     Circle().fill(badgeColor)
                                         .frame(width: 18, height: 18)
                                         .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1.2))
-                                        .shadow(color: badgeColor.opacity(0.5), radius: 3, y: 1)
+                                        .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
                                     HStack(spacing: 1) {
                                         Image(systemName: badgeIcon)
                                             .font(.system(size: 7, weight: .black))
@@ -177,7 +176,6 @@ struct OfficePanel: View {
                         )
                         .frame(width: 60, height: 60)
                         .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 2))
-                        .shadow(color: theme.accent.opacity(0.65), radius: 12, y: 5)
                         .shadow(color: .black.opacity(0.35), radius: 6, y: 3)
                     Image(systemName: "cart.fill")
                         .font(.system(size: 23, weight: .black))
@@ -191,7 +189,7 @@ struct OfficePanel: View {
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(Capsule().fill(Palette.gold))
                         .overlay(Capsule().stroke(.white.opacity(0.6), lineWidth: 1))
-                        .shadow(color: Palette.gold.opacity(0.4), radius: 3, y: 1)
+                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                         .offset(x: 6, y: -4)
                 }
                 Text("MAĞAZA")
@@ -221,7 +219,7 @@ struct OfficePanel: View {
                         )
                         .frame(width: 44, height: 44)
                         .overlay(Circle().stroke(.white.opacity(0.55), lineWidth: 1.8))
-                        .shadow(color: Palette.success.opacity(0.6), radius: 8, y: 3)
+                        .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
                     Image(systemName: Icons.Screen.raise)
                         .font(.system(size: 20, weight: .black))
                         .foregroundStyle(.white)
@@ -240,7 +238,6 @@ struct OfficePanel: View {
             .padding(.leading, 4).padding(.vertical, 4)
             .background(Capsule().fill(theme.surfaceElevated.opacity(0.95)))
             .overlay(Capsule().stroke(Palette.success.opacity(0.55), lineWidth: 1.6))
-            .shadow(color: Palette.success.opacity(0.45), radius: 10, y: 3)
             .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
         }
         .buttonStyle(.pressable)

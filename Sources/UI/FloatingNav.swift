@@ -56,7 +56,6 @@ struct FloatingNavCluster: View {
                     radius: 16,
                     x: side == .left ? 4 : -4,
                     y: 8)
-            .shadow(color: theme.accent.opacity(0.2), radius: 22, x: 0, y: 0)
         )
     }
 
@@ -78,7 +77,7 @@ struct FloatingNavCluster: View {
                                 startPoint: .top, endPoint: .bottom
                             )
                         )
-                        .shadow(color: theme.accent.opacity(0.7), radius: 12, y: 3)
+                        .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
                         .overlay(Circle().stroke(.white.opacity(0.45), lineWidth: 1.5))
                 } else {
                     // Pasif: mat daire + ince stroke.
@@ -106,7 +105,7 @@ struct FloatingNavCluster: View {
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(Capsule().fill(theme.accent))
                         .overlay(Capsule().stroke(.white.opacity(0.5), lineWidth: 1))
-                        .shadow(color: theme.accent.opacity(0.55), radius: 3, y: 1)
+                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                         .offset(y: 10)
                         .transition(.scale.combined(with: .opacity))
                 }

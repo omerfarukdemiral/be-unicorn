@@ -94,13 +94,71 @@ enum DecisionSystem {
         }
     }
 
-    /// Uygun kartlardan birini seç. Kriz kartlarına öncelik ver.
+    /// Uygun kartlardan birini seç. Şirket sağlık durum-makinesi (companyHealth) kartların
+    /// ÖNCELİĞİNİ belirler — ekonomi sabitleri/etkileri değişmez, sadece dağılım kayar.
+    ///
+    /// Önceliklendirme (Tasarım Prensipleri E maddesi):
+    /// - `.crisis`: crisis + team + product kartlarına çok yüksek ağırlık (kurtarma odaklı).
+    /// - `.strained`: crisis + team + product + uyarıcı kartlar (önleyici).
+    /// - `.healthy`: opportunity + press + investor + business-as-usual karışım.
+    /// - `.recovering`: team + product + opportunity (toparlanma desteği).
+    /// - Uzun zincir (`crisisChainCount > 2`): crisis kartları neredeyse garanti.
     @MainActor
     static func pick(for model: GameModel, state: GameState) -> DecisionCard? {
         let eligible = DecisionContent.all.filter { isEligible($0, model: model, state: state) }
         guard !eligible.isEmpty else { return nil }
-        let crises = eligible.filter { $0.category == .crisis }
-        if !crises.isEmpty, Bool.random() { return crises.randomElement() }
-        return eligible.randomElement()
+        return weightedPick(from: eligible, health: model.companyHealth,
+                            chainCount: state.crisisChainCount)
+    }
+
+    /// Sağlık durumuna göre kategori ağırlıkları üret + ağırlıklı rastgele seçim.
+    static func weightedPick(from cards: [DecisionCard],
+                             health: CompanyHealth,
+                             chainCount: Int) -> DecisionCard? {
+        let weights = categoryWeights(health: health, chainCount: chainCount)
+        let weighted: [(DecisionCard, Double)] = cards.map { card in
+            (card, max(0.0001, weights[card.category] ?? 1.0))
+        }
+        let total = weighted.reduce(0.0) { $0 + $1.1 }
+        guard total > 0 else { return cards.randomElement() }
+        var roll = Double.random(in: 0..<total)
+        for (card, w) in weighted {
+            if roll < w { return card }
+            roll -= w
+        }
+        return weighted.last?.0
+    }
+
+    /// Şirket sağlığına göre kategori ağırlık tablosu. Daha yüksek değer → daha sık çıkar.
+    static func categoryWeights(health: CompanyHealth, chainCount: Int) -> [DecisionCategory: Double] {
+        switch health {
+        case .crisis:
+            // Kırmızı bölge: crisis kartları baskın, team/product kurtarma uygun, opportunity nadir.
+            var w: [DecisionCategory: Double] = [
+                .crisis: 8.0, .team: 3.0, .product: 2.5, .market: 1.5,
+                .investor: 1.0, .press: 0.5, .opportunity: 0.4
+            ]
+            // Uzun zincir → crisis kartlarına neredeyse garanti yönlendir (oyuncu tepki vermeli).
+            if chainCount > 2 { w[.crisis] = 14.0 }
+            return w
+        case .strained:
+            // Sarı bölge: önleyici uyarılar — crisis + team + product + biraz market.
+            return [
+                .crisis: 3.5, .team: 3.0, .product: 2.5, .market: 2.0,
+                .investor: 1.5, .press: 1.0, .opportunity: 1.0
+            ]
+        case .healthy:
+            // Yeşil bölge: fırsatlar + basın + yatırımcı + iş-akışı karışım.
+            return [
+                .crisis: 0.5, .team: 1.5, .product: 1.5, .market: 1.5,
+                .investor: 2.5, .press: 2.5, .opportunity: 3.0
+            ]
+        case .recovering:
+            // Toparlanma: ekip + ürün + fırsat hafifçe baskın; crisis hâlâ olası ama düşük.
+            return [
+                .crisis: 1.0, .team: 2.5, .product: 2.5, .market: 1.5,
+                .investor: 1.5, .press: 1.5, .opportunity: 2.5
+            ]
+        }
     }
 }

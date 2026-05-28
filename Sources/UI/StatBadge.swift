@@ -60,9 +60,9 @@ struct StatBadge: View {
             Capsule().stroke(tint.opacity(prominent ? 0.55 : 0.35),
                              lineWidth: prominent ? 1.2 : 1)
         )
-        // Glow: kahraman rozette daha yoğun, mini rozette ince halka.
-        .shadow(color: tint.opacity(prominent ? 0.4 : 0.18),
-                radius: prominent ? 14 : 6, y: prominent ? 5 : 2)
+        // Sade derinlik gölgesi (kahraman rozette). Mini rozette gölge yok — flat & temiz.
+        .shadow(color: prominent ? .black.opacity(0.25) : .clear,
+                radius: prominent ? 4 : 0, y: prominent ? 2 : 0)
     }
 
     var body: some View {

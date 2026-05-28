@@ -95,7 +95,6 @@ struct DecisionCardView: View {
                 .fill(tint)
                 .frame(height: 3)
                 .padding(.horizontal, Space.s6)
-                .shadow(color: tint.opacity(0.6), radius: 6, y: 1)
         }
         .overlay(RoundedRectangle(cornerRadius: Radius.overlay).stroke(tint.opacity(0.3), lineWidth: 1.5))
         .shadow(color: .black.opacity(0.5), radius: 20, y: 8)

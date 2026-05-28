@@ -70,7 +70,7 @@ struct FundingRoundView: View {
                     Image(systemName: Icons.Screen.funding)
                         .font(.system(size: 60, weight: .bold))
                         .foregroundStyle(theme.accent)
-                        .shadow(color: theme.accent.opacity(0.5), radius: 12)
+                        .shadow(color: theme.accent.opacity(0.3), radius: 9)
                         .scaleEffect(appeared ? 1 : 0.4)
                 }
                 .frame(height: 90)
@@ -156,8 +156,8 @@ struct WinView: View {
                     Image(systemName: Icons.Screen.win)
                         .font(.system(size: 84, weight: .bold))
                         .foregroundStyle(Palette.unicorn)
-                        .shadow(color: Palette.unicorn.opacity(glowPulse ? 0.9 : 0.4),
-                                radius: glowPulse ? 28 : 14)
+                        .shadow(color: Palette.unicorn.opacity(glowPulse ? 0.55 : 0.25),
+                                radius: glowPulse ? 22 : 11)
                         .scaleEffect(appeared ? 1 : 0.5)
                 }
                 .frame(height: 108)
@@ -165,7 +165,7 @@ struct WinView: View {
                 Text("UNICORN!")
                     .font(.displayXL)
                     .foregroundStyle(Palette.unicorn)
-                    .shadow(color: Palette.unicorn.opacity(0.5), radius: 12)
+                    .shadow(color: Palette.unicorn.opacity(0.3), radius: 9)
 
                 // "$1 MİLYAR" vurgusu — gold rozet.
                 Text("$1 MİLYAR DEĞERLEME")

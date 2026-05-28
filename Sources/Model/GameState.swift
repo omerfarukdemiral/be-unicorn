@@ -34,6 +34,10 @@ struct GameState: Codable {
     var pendingEventID: String? = nil
     var moraleTargetBonus: Double = 0  // kararların/modüllerin kalıcı moral etkisi
 
+    // Şirket sağlık durum-makinesi (HealthSystem) — krizler state'e bağlı tetiklenir.
+    // strained→crisis geçişinde artar, healthy'e dönünce 0'a sıfırlanır (zincir izleme).
+    var crisisChainCount: Int = 0
+
     // Zaman & istatistik
     var months: Double = 0             // şirket yaşı (oyun-ayı, kesirli)
     var totalDecisions: Int = 0
@@ -174,6 +178,9 @@ struct GameState: Codable {
         // Eski kayıt / hiç eşyası olmayan oyuncu: garaj için birkaç basit masa tohumla
         // ki ilk çalışan(lar) oturabilsin (taban koltuk + 2 masa = makul başlangıç).
         if ownedItems.isEmpty { ownedItems = [0: 2] }
+
+        // Şirket sağlık durum-makinesi — eski kayıt / bozuk veri için güvenli varsayılan.
+        crisisChainCount = max(0, crisisChainCount)
 
         // Şirket profili: sektör katalog dışıysa güvenli tabana çek.
         if Balance.sector(profile.sector) == nil { profile.sector = 0 }

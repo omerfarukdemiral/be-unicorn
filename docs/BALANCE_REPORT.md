@@ -309,3 +309,112 @@ varsayımıyla zaman-tabanlı tetiklenir (sprint her 0.5 ay, çeyrek her 3 ay, s
   `onlineFactor 0.35`) ile moral/itibar dokunuşu + kalıcı sezon çarpanı uygular.
 - `RETENTION_REWARDS_ENABLED` anahtarı ile ödüllü/ödülsüz koşu karşılaştırması (§9 tablosu),
   reklam karşılaştırması (§4/g) artık retention KAPALI koşar ki reklam kaldıracı izole kalsın.
+
+---
+
+## 10. Strateji arketip dengesi (madde C) — Çoklu Yol doğrulaması
+
+> Tasarım Prensibi (`docs/DESIGN_PRINCIPLES.md`): Hiçbir kararın "açıkça en iyi"
+> seçeneği olamaz. **Dört strateji arketipi de** Garaj→Unicorn yolunu kazanabilmeli;
+> hiçbiri diğerine kesin baskın olmamalı.
+>
+> BalanceSim'e dört farklı **oyuncu politikası** eklendi (`Policy` + `Archetype`):
+> aynı çekirdek ekonomi (`Sim`) üzerinde farklı hire/modül/raise/reklam **stratejisi**
+> ile koşturuluyor. Politika parametreleri: `minRunway`, `bootstrapBufferMult`,
+> `adReinvestBase/Cap`, `adHealthyLtvCac`, `adMinStage`, `raiseRounds`/`maxStageToRaise`,
+> `hirePriorityOrder`, `headcountCap` (departman başına tavan), `moduleBuyOrder`.
+
+### Sonuç tablosu (çekirdek ekonomi + retention AÇIK — gerçek oyuncu deneyimi)
+
+| Arketip | Unicorn süresi | Kullanıcı | MRR/ay | ARPU | Churn | İtibar | LTV:CAC | Hisse | Reklam% | Karakter |
+|---------|---------------:|----------:|-------:|-----:|------:|-------:|--------:|------:|--------:|----------|
+| **VC-Roket** | **60.0 dk** (en hızlı) | 289K | $12.52M | $43.3 | 1.6% | 52 | 9.9 | %47 | %46 ücretli | Tur sermayesiyle pazarlama+dev'i şişir, erken reklam, hızlı ölçek. |
+| **Platform Geniş** | 60.6 dk | 304K | $12.55M | $41.3 | 1.8% | 50 | 7.9 | %47 | %46 ücretli | Dağıtık geniş ekip; büyüme + verim modülleri; çoklu kanal. |
+| **Niş Uzman** | 69.4 dk | 313K | $12.50M | $39.9 | 2.0% | 49 | 4.9 | %47 | %48 ücretli | Sales (50) + Ops (38) yoğun, Pazarlama-light (14), Premium/Churn modülleri önde. |
+| **Bootstrap-Frugal** | **96.0 dk** (en yavaş) | 555K | $10.48M | $18.9 | 3.9% | 54 | 3.2 | %47 | %32 ücretli | Az çalışan + organik dominasyonu (%68), reklam geç açılır, sıkı tampon. |
+
+- **4/4 arketip Unicorn'a vardı.** Yavaş/hızlı oranı: **1.60x** (hedef <2.0x → sağlıklı bant).
+- **Hisse korunması** tüm arketiplerde ~%47 (tüm turlar alındı). Bootstrap-Frugal'ın
+  ayırt edici özelliği "hisse" değil **yol kompozisyonu**: ekibin %30'u (Niş)/%50'si
+  (VC-Roket) yerine ekip-light + organik-heavy bir profil; reklamın %32'si vs %46'sı.
+- Hiçbir arketip diğerine ezici üstün değil; **fark = süre × yol**, **hedef = aynı**.
+
+### Her arketipin ana mekanikleri ve kritik kararları
+
+#### Bootstrap-Frugal
+- **Politika**: `bootstrapBufferMult 1.8`, `adMinStage 2` (Seed'e kadar reklam YOK),
+  `adReinvestBase 0.20 / Cap 0.40`, `headcountCap [42,22,12,22,24]`,
+  `moduleBuyOrder [4,2,3,0,...]` (Şirket Kültürü + Premium + Müşteri Başarısı önce).
+- **Kritik kararlar**: pazarlamayı 12'de sabitle (overload patlamasın), mühendisliği 42'ye
+  çıkarak kapasiteyi aç, premium/churn modülleri ile birim ekonomiyi kasla. Reklam ancak
+  Seed'den sonra ve sadece %20-40 yeniden-yatırım oranıyla.
+- **Profil**: yüksek itibar (54), organik %68 — "az ama kaliteli" topluluk hissi.
+- **Risk**: pazarlama-light → kapasiteyi aşma riski yok ama büyüme yavaş; bootstrap
+  ruhu (eşit hisse) tasarım kararıyla değil, "tur al ama yavaş büyü" disipliniyle.
+
+#### VC-Roket
+- **Politika**: `bootstrapBufferMult 1.4`, `adMinStage 1` (Pre-seed'den itibaren reklam),
+  `adReinvestBase 0.80 / Cap 0.95`, `adHealthyLtvCac 2.0` (marjinal ekonomide bile gaza bas),
+  `hirePriorityOrder [2,0,1,3,4]` (pazarlama+dev önce).
+- **Kritik kararlar**: her tur kapanır kapanmaz al, sermayeyi pazarlama+dev'e dök,
+  Growth Hack + Premium Paket modülleri ile MRR'yi patlat. Reklam kâr fazlasının %80'i.
+- **Profil**: Series A→B aralığı kısa (16 dk), zirve reklam bütçesi $6M/ay, LTV:CAC 9.9.
+- **Risk**: buffer ↓ olunca erken iflas (1.3'te iflas, 1.4'te sağ). Disiplin lazım.
+
+#### Niş Uzman
+- **Politika**: `bootstrapBufferMult 1.6`, `adMinStage 2`, `adHealthyLtvCac 3.5`
+  (yüksek birim ekonomi şart), `hirePriorityOrder [2,1,3,4,0]` (pazarlama → ürün → satış →
+  ops → dev en son), `headcountCap [30,35,14,50,38]` (satış+ops yüksek, pazarlama düşük),
+  `moduleBuyOrder [2,3,4,...]` (Premium Paket + Müşteri Başarısı ÖNCE).
+- **Kritik kararlar**: ARPU motorunu erken kur (Premium 5/5, salesPower↑), churn'ü ops+modülle
+  düşür (churn 2.0%), pazarlamayı dizginle (kullanıcı kapasite içinde kalsın).
+- **Profil**: ARPU $39.9, LTV:CAC 4.9, churn %2.0 — "az ama derin ekonomi" karakteri.
+- **Risk**: pazarlama yetersiz kalırsa MRR doyma noktasına gelir; reklam hâlâ önemli.
+
+#### Platform Geniş
+- **Politika**: `bootstrapBufferMult 1.4`, `adMinStage 1`, `adHealthyLtvCac 2.8`,
+  `hirePriorityOrder [2,0,1,4,3]`, `headcountCap` SINIRSIZ, `moduleBuyOrder [1,0,6,7,...]`
+  (Growth Hack + CI/CD + gider-azaltma önce).
+- **Kritik kararlar**: dağıtık ekibi büyüt (toplam 169 hire), gider-azaltma modülleriyle
+  (Sunucu+Hibrit Ofis) burn baskısını dağıt, çok kanaldan büyüme.
+- **Profil**: en geniş ekip (169 hire), churn %1.8 (en düşük), birim ekonomi sağlıklı (LTV:CAC 7.9).
+- **Risk**: erken aşamada hire-spam iflas getirir; buffer < 1.4 ölümcül.
+
+### Yapılan kalibrasyonlar — politika parametreleri
+
+**Önemli:** Bu maddede `Balance.swift` SAYISAL SABİTLERİNE DOKUNULMADI. Çoklu-yol
+doğrulaması yalnızca **simdeki politika parametreleri** (oyuncu davranışı modeli) ile
+sağlandı. Yani 4 arketip aynı ekonomik kurallarda farklı stratejilerle kazanıyor —
+denge kalibrasyonu zaten yapılmış durumda (§7 + §9), arketipler "üst-katman"da meşru.
+
+İlk denemelerde tek tick'te 5000 aksiyona kadar greedy döngü "hire-spam"e neden olup
+arketipleri iflasa düşürüyordu. **Tek değişiklik**: `Runner.tick()`'te aksiyon
+döngüsü `while → for 0..<2` (tick başına en fazla 2 aksiyon) yapıldı.
+
+| Değişiklik | Eski | Yeni | Gerekçe |
+|------------|------|------|---------|
+| `Runner.tick()` aksiyon limiti | `while smartBuyStep(s) { … }` (sınırsız) | `for _ in 0..<2 { … }` (tick başına 2) | Gerçek oyuncu 0.1 sn'de düzinelerce satın alma yapmaz; her aksiyon sonrası ekonominin tepkimesini görmek istenir. Arketiplerin agresif hire-spam'le ilk dakikalarda iflasa düşmesi engellendi. |
+
+### "Çoklu Yol" doğrulaması — özet kararlar
+
+- **Tüm arketipler Unicorn'a varıyor** (4/4, 90%+ güven, sim deterministik).
+- **Yavaş/hızlı oranı 1.60x** — hiçbir arketip diğerine ezici baskın değil; süre farkı
+  oynanış stiline doğal bir bağlılık (agresif=hızlı, frugal=yavaş).
+- **Profil farklılığı belirgin**:
+  - VC-Roket: yüksek burn, yüksek reklam, çabuk büyüme.
+  - Platform Geniş: geniş ekip, dengeli kanallar, düşük churn.
+  - Niş Uzman: yüksek ARPU, düşük churn, az ama derin.
+  - Bootstrap-Frugal: organik dominansı, az ekip, yavaş ama varır.
+- **Pre-seed turuna ulaşma süresi** (oyun "hook"): 3-3.3 dk her arketipte → ilk
+  on-boarding deneyimi tüm yollarda eşit (kritik).
+- **İflas riski** her arketip için var: buffer azaltılınca VC-Roket 6 sn'de, Bootstrap
+  pazarlama-light ölü-doğum riskine girebilir; "akıllı oyuncu" disiplini şart.
+
+### BalanceSim'de yapılanlar (madde C)
+- `Archetype` enum + `Policy` struct (`policy(for:)`): 4 davranış profili tek dosyada.
+- `ACTIVE_POLICY` global, runtime'da set edilir; `adBudgetStep`, `smartBuyStep`,
+  `bootstrapStep` artık policy-duyarlı (öncelik sırası, headcount/modül tavanları,
+  raise tutumu, ad parametreleri).
+- `runArchetype(_:)` her arketipi izole koşturur, `ArchetypeReport` ile özetler.
+- Rapor bölümü (i): arketip karşılaştırma tablosu + detay profilleri + Çoklu Yol özeti.
+- `Runner.tick()` aksiyon limiti (sadece davranış modeli düzeltmesi, ekonomi DEĞİL).

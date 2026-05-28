@@ -23,9 +23,9 @@ enum AppButton {
     static let height: CGFloat = 44
     static let compactHeight: CGFloat = 40
 
-    /// Birincil CTA — accent dolu + hafif glow.
+    /// Birincil CTA — accent dolu (sade derinlik gölgesi).
     static func primary(_ theme: Theme, enabled: Bool = true,
-                        glow: Bool = true) -> some ViewModifier {
+                        glow: Bool = false) -> some ViewModifier {
         ButtonChrome(bg: enabled ? theme.accent : theme.surfaceHigh,
                      fg: enabled ? .white : theme.textQuaternary,
                      glow: enabled && glow ? theme.accent : nil,
@@ -58,6 +58,9 @@ struct ButtonChrome: ViewModifier {
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .background(bg, in: RoundedRectangle(cornerRadius: Radius.m))
-            .shadow(color: glow?.opacity(0.45) ?? .clear, radius: glow != nil ? 12 : 0, y: 4)
+            // Sade derinlik: butonlar hâlâ kabarık hissedilsin, neon hâlesi yok.
+            .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+            // Kutlama CTA'ları (Win / Sezon Finali) için explicit glow korunur — soft.
+            .shadow(color: glow?.opacity(0.3) ?? .clear, radius: glow != nil ? 10 : 0, y: 4)
     }
 }

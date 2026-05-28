@@ -60,11 +60,9 @@ struct PanelCard<Content: View>: View {
                     .stroke(highlighted ? theme.hairlineStrong : theme.hairline,
                             lineWidth: highlighted ? 1.5 : 1)
             )
-            // Koyu baz üstünde net derinlik.
+            // Koyu baz üstünde net derinlik. Vurguyu stroke (hairlineStrong) taşır;
+            // burada renkli aura yok — sade, modern dark UI.
             .shadow(color: .black.opacity(0.28), radius: theme.shadowRadius, y: 3)
-            // Aurora glow: seçili kartta accent ışıması, evre büyüdükçe biraz daha güçlü.
-            .shadow(color: highlighted ? theme.accent.opacity(0.22 + Double(theme.stage) * 0.02) : .clear,
-                    radius: highlighted ? 12 + CGFloat(theme.stage) : 0, y: 4)
     }
 }
 

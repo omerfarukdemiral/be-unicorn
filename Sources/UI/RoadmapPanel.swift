@@ -118,7 +118,7 @@ private struct StageRow: View {
             Circle()
                 .fill(dotColor)
                 .frame(width: 38, height: 38)
-                .shadow(color: isCurrent ? theme.accent.opacity(0.5) : .clear, radius: 8)
+                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             if isDone {
                 Image(systemName: "checkmark")
                     .font(.system(size: 16, weight: .black))

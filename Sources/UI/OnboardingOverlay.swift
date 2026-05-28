@@ -14,7 +14,8 @@ struct OnboardingOverlay: View {
         ("trophy.fill",         "Lig & Çeyrek",     "Her çeyrek performansın puanlanır; iyi oyna, Garaj Ligi'nden Unicorn Ligi'ne yüksel."),
         ("target",              "Günlük Hedef & Streak", "Her gün küçük bir hedefi tamamla, streak'ini büyüt ve seriyi koparma."),
         ("flag.checkered",      "Haftalık Sprint",  "Haftalık sprintte rakiplerinle yarış, ilk sırada bitirip ödül kap."),
-        ("square.grid.3x3.fill", "Ofis Krokisi",    "Ofisini koltuk ve eşyalarla döşe; her yerleşim ekibine küçük bonuslar verir.")
+        ("square.grid.3x3.fill", "Ofis Krokisi",    "Ofisini koltuk ve eşyalarla döşe; her yerleşim ekibine küçük bonuslar verir."),
+        ("arrow.triangle.branch", "Tek doğru yol yoktur.", "Bu oyunda başarısızlık bir bilgi parçasıdır. Her denemen bir önceki stratejiyi geliştirir. Defalarca kurabilir, defalarca öğrenebilirsin.")
     ]
 
     var body: some View {

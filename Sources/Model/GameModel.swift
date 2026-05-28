@@ -19,6 +19,10 @@ final class GameModel: ObservableObject {
     @Published var pendingToast: String? = nil
     @Published var inspectedDept: Int? = nil   // ofiste çalışana tıklanınca açılan kart
     @Published var founderTip: String = NarrativeContent.tips.first ?? ""
+    /// HUD üstünde yüzen ±tutar çipi için son ayrık nakit hareketi (kazanç/harcama).
+    /// Yalnızca oyuncu eylemleri (hire/buy/raise/decision) tetikler — tick'in sürekli
+    /// gelir/burn akışı GÖSTERİLMEZ (gürültü olur). UI `$lastCashDelta`'yı dinler.
+    @Published var lastCashDelta: CashDeltaEvent? = nil
 
     private var timer: Timer?
     private var lastTick = Date()
@@ -28,6 +32,10 @@ final class GameModel: ObservableObject {
     private var sinceDecision: Double = 0
     private var nextDecisionAt: Double = Balance.decisionMinInterval
     private var debtMonths: Double = 0
+
+    // Şirket sağlık durum-makinesi: önceki state'i hatırla → geçişleri yakala.
+    // (Persist edilmez; tick'te yeniden hesaplanır. Zincir sayacı GameState.crisisChainCount'ta tutulur.)
+    private var lastHealth: CompanyHealth = .healthy
 
     init() {
         if let saved = SaveManager.load() {
@@ -42,6 +50,9 @@ final class GameModel: ObservableObject {
         seedCohortIfNeeded()
         refreshDailyGoalIfNeeded()
         scheduleNextDecision()
+        // Şirket sağlık durum-makinesi: mevcut metriklerden ilk state'i tohumla
+        // (önceki state olarak healthy — sahte geçiş tetiklenmesin).
+        lastHealth = HealthSystem.evaluate(model: self, previous: .healthy)
         start()
     }
 
@@ -183,10 +194,18 @@ final class GameModel: ObservableObject {
             && freeAreaM2 >= item.areaM2
     }
 
+    /// Oyuncu eylemiyle tetiklenen nakit hareketini HUD'a yüzen çip olarak yayar.
+    /// 1$'dan küçük gürültüleri yutar. İşaret: pozitif=kazanç, negatif=harcama.
+    private func emitCashDelta(_ amount: Double) {
+        guard abs(amount) >= 1 else { return }
+        lastCashDelta = CashDeltaEvent(amount: amount)
+    }
+
     @discardableResult
     func buyItem(_ id: Int) -> Bool {
         guard canBuyItem(id), let item = Balance.officeItem(id) else { return false }
         state.cash -= item.cost
+        emitCashDelta(-item.cost)
         state.ownedItems[id, default: 0] += 1
         // Anlık küçük moral dokunuşu — yeni eşya hevesi (hedef zaten yukarı çeker).
         if item.moraleBonus > 0 { state.morale = min(100, state.morale + 1) }
@@ -338,6 +357,44 @@ final class GameModel: ObservableObject {
         netPerMonth >= -0.0001 ? .infinity : state.cash / -netPerMonth
     }
 
+    // MARK: - Şirket Sağlık Durum-Makinesi (krizler state-tetikli + zincirleme)
+
+    /// Şirketin o anki sağlık durumu (HealthSystem'in saf değerlendirmesi).
+    /// Önceki state'i hesaba katar (toparlanma sezgisi için).
+    var companyHealth: CompanyHealth {
+        HealthSystem.evaluate(model: self, previous: lastHealth)
+    }
+
+    /// Zincirleme kriz sayacı (kötü gidişat sürerse büyür, healthy'e dönünce sıfırlanır).
+    var crisisChainCount: Int { state.crisisChainCount }
+
+    /// Her tick'te çağrılır: health değişimini izle, geçişlerde zincir sayacını güncelle.
+    /// - strained → crisis geçişi: zincir +1 (kötüleşme).
+    /// - * → healthy geçişi: zincir = 0 (toparlanma tamamlandı).
+    /// - crisisChainCount > 2 (uzun zincir): moral uyarısı + toast.
+    private func updateHealthState() {
+        let current = HealthSystem.evaluate(model: self, previous: lastHealth)
+        if current != lastHealth {
+            switch (lastHealth, current) {
+            case (.strained, .crisis):
+                // Zincirleme kötüleşme: sıkıntıdan krize geçtik.
+                state.crisisChainCount += 1
+                if state.crisisChainCount > 2 {
+                    // Uzun zincir: moral uyarısı + oyuncuya bildirim.
+                    state.morale = max(0, state.morale - 2)
+                    pendingToast = "Şirket sağlığı zincirleme kötüleşiyor — krizden çıkmak için bir karar al."
+                    Feedback.warning()
+                }
+            case (_, .healthy):
+                // Toparlanma tamamlandı: zincir sıfırlanır.
+                state.crisisChainCount = 0
+            default:
+                break
+            }
+            lastHealth = current
+        }
+    }
+
     var valuation: Double {
         mrr * 12 * Balance.revenueMultiple
             + state.users * Balance.perUserValue
@@ -363,6 +420,7 @@ final class GameModel: ObservableObject {
         let c = hireCost(i)
         guard state.cash >= c else { return false }
         state.cash -= c
+        emitCashDelta(-c)
         state.headcount[i] += 1
         state.totalHires += 1
         state.dailyHires += 1                          // günlük hedef ilerlemesi
@@ -402,7 +460,9 @@ final class GameModel: ObservableObject {
     @discardableResult
     func buyModule(_ i: Int) -> Bool {
         guard canBuyModule(i) else { return false }
-        state.cash -= moduleCost(i)
+        let c = moduleCost(i)
+        state.cash -= c
+        emitCashDelta(-c)
         state.moduleLevels[i] += 1
         save()
         return true
@@ -429,6 +489,7 @@ final class GameModel: ObservableObject {
     func raiseRound() -> Bool {
         guard canRaise, let next = nextStage else { return false }
         state.cash += next.raiseAmount
+        emitCashDelta(next.raiseAmount)
         state.founderEquity *= (1 - next.equityGiven)
         state.stage += 1
         state.stageReached = max(state.stageReached, state.stage)
@@ -922,8 +983,11 @@ final class GameModel: ObservableObject {
 
     private func apply(_ e: DecisionEffect) {
         switch e {
-        case .cash(let v):              state.cash += v
-        case .cashPercent(let p):       state.cash += state.cash * p
+        case .cash(let v):              state.cash += v; emitCashDelta(v)
+        case .cashPercent(let p):
+            let delta = state.cash * p
+            state.cash += delta
+            emitCashDelta(delta)
         case .users(let v):             state.users = max(0, state.users + v)
         case .usersPercent(let p):      state.users = max(0, state.users * (1 + p))
         case .morale(let v):            state.morale += v
@@ -1058,6 +1122,7 @@ final class GameModel: ObservableObject {
         state.quarterMoraleSamples += monthFraction
 
         advanceCohort(dt)   // canlı leaderboard: rakip skorları oyun temposuyla ilerler
+        updateHealthState() // şirket sağlık durum-makinesi: state geçişlerini yakala (zincir izleme)
         maybeCloseQuarter()
         maybeCloseSprint()
 
@@ -1197,7 +1262,9 @@ final class GameModel: ObservableObject {
         let catIndex = min(max(0, category), Balance.projectCategories.count - 1)
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let projName = cleanName.isEmpty ? "Proje \(state.projects.count + 1)" : cleanName
-        state.cash -= projectStartCost(catIndex)
+        let cost = projectStartCost(catIndex)
+        state.cash -= cost
+        emitCashDelta(-cost)
         state.projects.append(ProjectState(name: projName, category: catIndex,
                                            startMonth: state.months, devProgress: 0, isLive: false))
         state.morale = min(100, state.morale + Balance.projectStartMoraleBonus)
@@ -1261,6 +1328,14 @@ final class GameModel: ObservableObject {
         pendingOfflineReport = OfflineReport(seconds: elapsed, cashDelta: dCash,
                                              usersDelta: dUsers)
     }
+}
+
+/// HUD üstünde yüzen ±tutar çipi için yayılan ayrık nakit hareketi.
+/// `id` her olay için yeni — UI Equatable üzerinden tekrarsız tetikleyebilsin.
+/// `amount` işaretli: pozitif=kazanç (yeşil), negatif=harcama (kırmızı).
+struct CashDeltaEvent: Identifiable, Equatable {
+    let id: UUID = UUID()
+    let amount: Double
 }
 
 /// "Yokken neler oldu" raporu.

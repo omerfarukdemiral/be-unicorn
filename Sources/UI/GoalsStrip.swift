@@ -101,8 +101,7 @@ struct GoalsStrip: View {
                     .stroke(highlighted ? badgeColor.opacity(0.45) : theme.hairline,
                             lineWidth: highlighted ? 1.4 : 1)
             )
-            .shadow(color: highlighted ? badgeColor.opacity(0.18) : .clear,
-                    radius: highlighted ? 8 : 0, y: 3)
+            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
         }
         .buttonStyle(.pressable)
     }
