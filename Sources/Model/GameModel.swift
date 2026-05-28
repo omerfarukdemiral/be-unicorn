@@ -626,15 +626,15 @@ final class GameModel: ObservableObject {
     }
 
     /// Canlı standings: oyuncu + rakipler, çeyrek skoruna göre sıralı (her tick güncel).
+    /// Rakipler artık sektör+kurucu+proje alt-satırıyla zengin (StandingEntry.subtitle).
     var liveStandings: [StandingEntry] {
         CohortSystem.standings(playerScore: liveQuarterScore,
                                playerName: playerCompanyName,
-                               cohortNames: state.cohortNames,
-                               cohortScores: state.cohortScores)
+                               competitors: state.cohortCompetitors)
     }
 
     /// Toplam kohort büyüklüğü (oyuncu dahil).
-    var cohortTotal: Int { state.cohortNames.count + 1 }
+    var cohortTotal: Int { state.cohortCompetitors.count + 1 }
     /// İlk N terfi eşiği (en üst ligde terfi yok → 0).
     var promoteCutoff: Int {
         state.leagueTier >= LeagueSystem.leagueCount - 1 ? 0 : CohortSystem.promoteTopN
@@ -646,25 +646,27 @@ final class GameModel: ObservableObject {
 
     /// Kohort hiç yoksa ya da lig değiştiyse taze kohort tohumla (çeyrek başı dili).
     private func seedCohortIfNeeded() {
-        if state.cohortNames.isEmpty || state.cohortTier != state.leagueTier {
+        if state.cohortCompetitors.isEmpty || state.cohortTier != state.leagueTier {
             regenerateCohort()
         }
     }
 
     /// Oyuncunun mevcut ligine uygun güçte taze rakip kohort üret (yeni hafta gibi).
+    /// Her rakip: ad + sektör + kurucu ad/soyad + flagship proje + canlı skor.
     private func regenerateCohort() {
-        let fresh = CohortSystem.freshCohort(tier: state.leagueTier)
-        state.cohortNames = fresh.names
-        state.cohortScores = fresh.scores
+        state.cohortCompetitors = CohortSystem.freshCompetitors(tier: state.leagueTier)
         state.cohortTier = state.leagueTier
+        // Eski paralel dizileri temizle (kafa karışıklığı + ileride drop edilebilir).
+        state.cohortNames.removeAll()
+        state.cohortScores.removeAll()
     }
 
     /// Bir tick'te rakip skorlarını oyun temposuyla ilerlet (canlı leaderboard).
     private func advanceCohort(_ dt: Double) {
-        guard !state.cohortScores.isEmpty else { return }
-        state.cohortScores = CohortSystem.advanced(scores: state.cohortScores,
-                                                   tier: state.leagueTier,
-                                                   progress: quarterProgress, dt: dt)
+        guard !state.cohortCompetitors.isEmpty else { return }
+        state.cohortCompetitors = CohortSystem.advancedCompetitors(
+            state.cohortCompetitors, tier: state.leagueTier,
+            progress: quarterProgress, dt: dt)
     }
 
     /// Çeyrek dolduysa kapanışı tetikle (overlay açılır, oyun mantığı duraklamaz).
@@ -706,8 +708,7 @@ final class GameModel: ObservableObject {
         // sıralanır, terfi/düşüş sıraya göre belirlenir (ilk N terfi, son N düşer).
         let standings = CohortSystem.standings(playerScore: breakdown.score,
                                                playerName: playerCompanyName,
-                                               cohortNames: state.cohortNames,
-                                               cohortScores: state.cohortScores)
+                                               competitors: state.cohortCompetitors)
         let rank = CohortSystem.playerRank(in: standings)
         let outcome = CohortSystem.outcome(rank: rank, total: standings.count,
                                            tier: state.leagueTier,

@@ -241,7 +241,7 @@ enum DecisionContent {
             ]),
 
         DecisionCard("star-resign", category: .team, speaker: "Yıldız Mühendis", icon: "👋",
-            prompt: "En iyi mühendislerin istifa mektubu masanda. Rakip şirketten 1,5 kat maaş teklifi almış.",
+            prompt: "{{firstName}}, en iyi mühendisinin istifa mektubu masanda. Rakip {{sector}} şirketinden 1,5 kat maaş teklifi almış — {{project}} ekibinde boşluk büyük olur.",
             trigger: .minStage(1),
             choices: [
                 .init("Karşı teklif yap", detail: "+kapasite korunur / ücret çapası yükselir + 6 ay sonra tekrar gider istatistiği", effects: [.cash(-5_000), .morale(4), .moraleTargetBonus(-1)],
@@ -285,7 +285,7 @@ enum DecisionContent {
         // MARK: - Ürün & Pazar
 
         DecisionCard("competitor", category: .market, speaker: "Pazar Sinyali", icon: "⚔️",
-            prompt: "Bir rakip, aynı özelliği bedavaya sundu. Kullanıcıların tedirgin.",
+            prompt: "{{sector}} pazarında bir rakip, {{project}}'in özelliğini bedavaya sundu. {{company}}'nın kullanıcıları tedirgin.",
             trigger: .minUsers(200),
             choices: [
                 .init("Fiyatı düşür, yarışa gir", detail: "+kullanıcı kalır / ARPU eridi + dipe yarış", effects: [.usersPercent(0.06), .cashPercent(-0.08), .moraleTargetBonus(-1)],
@@ -295,7 +295,7 @@ enum DecisionContent {
             ]),
 
         DecisionCard("pivot", category: .product, speaker: "Ürün Ekibi", icon: "🔀",
-            prompt: "Veriler farklı bir kullanım şeklini işaret ediyor. Pivot yapalım mı?",
+            prompt: "{{project}} verisi farklı bir kullanım şeklini işaret ediyor. {{firstName}}, pivot yapalım mı?",
             trigger: .minUsers(300),
             choices: [
                 .init("Cesur pivot", detail: "+yeni segment + öğrenme / −kullanıcı + ekip yorgun", effects: [.usersPercent(-0.15), .reputation(6), .morale(-4), .moraleTargetBonus(2)],

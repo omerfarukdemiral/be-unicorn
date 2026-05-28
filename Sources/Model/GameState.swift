@@ -111,8 +111,12 @@ struct GameState: Codable {
     // Çeyrek başında ligine uygun taze 8 rakip startup (oyuncu dahil 9'luk kohort).
     // Skorlar çeyrek boyunca oyun temposuyla ilerler; çeyrek kapanışında oyuncu + rakipler
     // sıralanır → SIRALAMAYA göre terfi/düşüş. Boşsa GameModel ilk tick'te taze tohumlar.
+    /// **DEPRECATED**: eski kayıt uyumluluğu için tutuluyor. Yeni kod
+    /// `cohortCompetitors`'i kullanır; normalize() boş olduğunda buradan migrate eder.
     var cohortNames: [String] = []     // rakip startup isimleri (oyuncu HARİÇ)
     var cohortScores: [Double] = []    // rakiplerin o anki çeyrek skoru (isimlerle paralel)
+    /// Zenginleştirilmiş rakip kohortu: her rakipte sektör + kurucu + proje + skor.
+    var cohortCompetitors: [Competitor] = []
     var cohortTier: Int = -1           // kohortun üretildiği lig (lig değişince yenilenir; -1 = hiç yok)
 
     // İstatistik grafiği için örnekler (cash, users, valuation, mrr)
@@ -204,6 +208,7 @@ struct GameState: Codable {
         seasonScoreSum = g(.seasonScoreSum, 0)
         cohortNames = g(.cohortNames, [String]())
         cohortScores = g(.cohortScores, [Double]())
+        cohortCompetitors = g(.cohortCompetitors, [Competitor]())
         cohortTier = g(.cohortTier, -1)
         history = g(.history, [HistoryPoint]())
         lastSaved = g(.lastSaved, Date())
@@ -266,6 +271,25 @@ struct GameState: Codable {
             cohortScores = Array(cohortScores.prefix(n))
         }
         cohortScores = cohortScores.map { min(100, max(0, $0)) }
+
+        // Migrate: eski `cohortNames/cohortScores` varsa ama yeni `cohortCompetitors`
+        // boşsa → minimal Competitor'lara dönüştür (sektör/kurucu/proje generic). Bir sonraki
+        // çeyrek değişiminde GameModel.regenerateCohort taze + zengin kohort üretir; bu
+        // yalnızca "save'i yumuşak geçir" amacıyla.
+        if cohortCompetitors.isEmpty && !cohortNames.isEmpty {
+            cohortCompetitors = cohortNames.enumerated().map { idx, name in
+                Competitor(name: name, sector: 0,
+                           founderFirstName: "—", founderLastName: "",
+                           projectName: "MVP",
+                           score: idx < cohortScores.count ? cohortScores[idx] : 0)
+            }
+        }
+        // Skorları aralık-kilitle (yeni alan için de güvenlik).
+        cohortCompetitors = cohortCompetitors.map { c in
+            var fixed = c
+            fixed.score = min(100, max(0, c.score))
+            return fixed
+        }
 
         // Ofis eşyaları: geçersiz id / negatif adetleri temizle. Eşya katalog dışıysa at.
         ownedItems = ownedItems.filter { Balance.officeItem($0.key) != nil && $0.value > 0 }

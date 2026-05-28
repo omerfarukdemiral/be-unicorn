@@ -137,11 +137,23 @@ struct LeaderboardRow: View {
                 .foregroundStyle(zoneColor)
                 .frame(width: 14)
 
-            // İsim — oyuncu kalın/accent.
-            Text(entry.name)
-                .font(.appText(13, entry.isPlayer ? .bold : .medium))
-                .foregroundStyle(entry.isPlayer ? theme.accent : theme.text)
-                .lineLimit(1).minimumScaleFactor(0.7)
+            // İsim + alt-satır (rakipler için sektör · kurucu · proje).
+            // Oyuncu satırında subtitle yok — kendi şirketinin bilgisi başka yerlerde görünür.
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.name)
+                    .font(.appText(13, entry.isPlayer ? .bold : .medium))
+                    .foregroundStyle(entry.isPlayer ? theme.accent : theme.text)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                if let subtitle = entry.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(
+                            entry.sectorColorHex.map { Color(hex: $0).opacity(0.85) }
+                                ?? theme.subtle
+                        )
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                }
+            }
 
             Spacer(minLength: Space.s2)
 

@@ -90,12 +90,16 @@ enum Balance {
     static let startCash: Double = 40_000
 
     static let baseArpu: Double = 3.8
+    // Gerçek oyun ARPU'ya evre çarpanı uygular (Series C'de ~2× taban). Sim'de YOKTU →
+    // rapor üst evrelerde gerçek MRR'ı ~%30-40 düşük gösteriyordu. Artık birebir.
+    static let arpuStageScaling: Double = 1.15
+    static func arpuMultiplier(forStage stage: Int) -> Double { pow(arpuStageScaling, Double(stage)) }
     static let baseChurn: Double = 0.05
     static let viralFactor: Double = 0.045
 
     static let startMorale: Double = 72
     static let baseMoraleTarget: Double = 60
-    static let moraleAdjustRate: Double = 0.08
+    static let moraleAdjustRate: Double = 0.05
     static let quitMoraleThreshold: Double = 28
     static let unpaidMoralePenalty: Double = 40
 
@@ -110,7 +114,7 @@ enum Balance {
     static let seasonOutputBonusCap: Double = 0.15         // toplam +%15 tavan
     static let seasonFinaleMoraleBonus: Double = 10
     static let seasonFinaleReputationBonus: Double = 8
-    static let monthsPerSprint: Double = 0.5
+    static let monthsPerSprint: Double = 1.0
     static let sprintWinMoraleBonus: Double = 4
     static let sprintWinReputationBonus: Double = 2
     static let dailyCompleteMoraleBonus: Double = 5
@@ -127,8 +131,8 @@ enum Balance {
     static let offlineCapSeconds: Double = 8 * 3600
     static let offlineEfficiency: Double = 0.5
 
-    static let decisionMinInterval: Double = 22
-    static let decisionMaxInterval: Double = 40
+    static let decisionMinInterval: Double = 18
+    static let decisionMaxInterval: Double = 30
 
     static let departments: [DepartmentDef] = [
         .init(id: 0, name: "Mühendislik",     role: .engineering, baseHireCost: 1_500, baseSalary: 900,   baseOutput: 1.0),
@@ -142,12 +146,12 @@ enum Balance {
     static let modules: [ModuleDef] = [
         .init(id: 0, name: "CI/CD Hattı",          baseCost: 8_000,  costGrowth: 4.0, maxLevel: 5, effect: .globalOutput(0.10),   unlockStage: 0),
         .init(id: 1, name: "Growth Hack",          baseCost: 12_000, costGrowth: 4.5, maxLevel: 5, effect: .growthMult(0.15),     unlockStage: 1),
-        .init(id: 2, name: "Premium Paket",        baseCost: 18_000, costGrowth: 5.0, maxLevel: 5, effect: .arpuMult(0.18),       unlockStage: 1),
+        .init(id: 2, name: "Premium Paket",        baseCost: 18_000, costGrowth: 4.0, maxLevel: 5, effect: .arpuMult(0.18),       unlockStage: 1),
         .init(id: 3, name: "Müşteri Başarısı",     baseCost: 15_000, costGrowth: 4.5, maxLevel: 5, effect: .churnReduce(0.12),    unlockStage: 2),
         .init(id: 4, name: "Şirket Kültürü",       baseCost: 10_000, costGrowth: 3.5, maxLevel: 5, effect: .moraleTarget(6.0),    unlockStage: 0),
-        .init(id: 5, name: "Uzaktan Çalışma",      baseCost: 22_000, costGrowth: 5.0, maxLevel: 4, effect: .salaryReduce(0.06),   unlockStage: 2),
+        .init(id: 5, name: "Uzaktan Çalışma",      baseCost: 22_000, costGrowth: 4.0, maxLevel: 4, effect: .salaryReduce(0.06),   unlockStage: 2),
         .init(id: 6, name: "Sunucu Optimizasyonu", baseCost: 14_000, costGrowth: 4.2, maxLevel: 5, effect: .infraCostReduce(0.15), unlockStage: 1),
-        .init(id: 7, name: "Hibrit Ofis",          baseCost: 20_000, costGrowth: 4.5, maxLevel: 4, effect: .rentCostReduce(0.12),  unlockStage: 2),
+        .init(id: 7, name: "Hibrit Ofis",          baseCost: 20_000, costGrowth: 4.0, maxLevel: 4, effect: .rentCostReduce(0.12),  unlockStage: 2),
     ]
 
     static let stages: [StageDef] = [
@@ -189,7 +193,7 @@ enum Balance {
 
     // MARK: Pazarlama / kullanıcı edinme
     static let baseCAC: Double = 7.0
-    static let cacStageScaling: Double = 1.25
+    static let cacStageScaling: Double = 1.30
     static let marketingAbsorption: Double = 5_000
     static let adBudgetStepBase: Double = 500
 }
@@ -326,7 +330,9 @@ final class Sim {
     }
 
     var arpu: Double {
-        Balance.baseArpu * (1 + effects.arpuMult) * (1 + salesPower * 0.05)
+        Balance.baseArpu
+            * Balance.arpuMultiplier(forStage: stage)
+            * (1 + effects.arpuMult) * (1 + salesPower * 0.05)
     }
 
     var mrr: Double { users * arpu }

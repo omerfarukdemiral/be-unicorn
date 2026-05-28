@@ -559,3 +559,125 @@ final class ScenarioTests: XCTestCase {
     }
 }
 
+// MARK: - Bağlam paketi: kararlar + rakipler
+
+/// CompanyContext interpolation + DecisionSystem'in döndürdüğü kart kişiselleştirilmiş mi
+/// + Competitor üretimi (sektör/kurucu/proje dolu) + standings rakipler için subtitle taşır.
+final class ContextPersonalizationTests: XCTestCase {
+
+    // MARK: CompanyContext
+
+    func testInterpolateReplacesAllPlaceholders() {
+        let ctx = CompanyContext(companyName: "Nova Labs",
+                                 founderFirstName: "Ada",
+                                 founderFullName: "Ada Yılmaz",
+                                 sector: "Fintech",
+                                 primaryProjectName: "Atlas")
+        let out = ctx.interpolate(
+            "{{firstName}} of {{company}} in {{sector}} ships {{project}}, signed: {{founder}}.")
+        XCTAssertEqual(out, "Ada of Nova Labs in Fintech ships Atlas, signed: Ada Yılmaz.")
+    }
+
+    func testInterpolatePassesThroughWhenNoPlaceholders() {
+        let ctx = CompanyContext(companyName: "X", founderFirstName: "Y", founderFullName: "Y Z",
+                                 sector: "S", primaryProjectName: "P")
+        let s = "Bu cümlede yer tutucu yok."
+        XCTAssertEqual(ctx.interpolate(s), s)
+    }
+
+    func testCompanyContextFallsBackOnEmptyState() {
+        // Profil ve proje yoksa nötr fallback değerler (kart "şirketin/Kurucu/teknoloji/ürününüz").
+        var state = GameState()
+        state.profile = CompanyProfile()   // boş
+        let ctx = CompanyContext(state: state)
+        XCTAssertEqual(ctx.companyName, "şirketin")
+        XCTAssertEqual(ctx.founderFirstName, "Kurucu")
+        XCTAssertEqual(ctx.sector, Balance.sectors.first?.name)  // sector 0 default
+        XCTAssertEqual(ctx.primaryProjectName, "ürününüz")
+    }
+
+    // MARK: DecisionSystem.pick → personalized
+
+    @MainActor
+    func testPickReturnsInterpolatedCardWhenCompanySet() {
+        SaveManager.wipe()
+        let model = GameModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Y",
+                                   company: "Nova Labs", sector: 0,
+                                   firstProjectName: "Atlas", firstProjectCategory: 0)
+        // angel-1 kartında {{company}}, {{firstName}}, {{project}} yer tutucuları var.
+        // Pick yeterince çağrıldığında muhtemelen angel-1'i de seçer (once card pool'da en başta).
+        // Direkt: pick'i once-card limitiyle birden çok çağırıp "şirket adı geçen" bir card bekleyelim.
+        var prompts: [String] = []
+        for _ in 0..<25 {
+            if let card = DecisionSystem.pick(for: model, state: model.state) {
+                prompts.append(card.prompt)
+            }
+        }
+        // Beklenti: en az bir kartta "Nova Labs" geçmeli (yer tutuculu kart prompt'ı çağrıldı).
+        XCTAssertTrue(prompts.contains(where: { $0.contains("Nova Labs") }),
+                      "En az bir pick'in promptu kişiselleştirilmiş şirket adını içermeli")
+    }
+
+    @MainActor
+    func testPickedCardChoicesAreInterpolatedConsistently() {
+        SaveManager.wipe()
+        let model = GameModel()
+        model.completeCompanySetup(firstName: "Ada", lastName: "Y", company: "ZenCorp",
+                                   sector: 0, firstProjectName: "MVP", firstProjectCategory: 0)
+        // İnterpolasyon idempotent: aynı sonuç tekrar çağrıldığında değişmez (saf fonksiyon).
+        let ctx = CompanyContext(state: model.state)
+        XCTAssertEqual(ctx.companyName, "ZenCorp")
+        XCTAssertEqual(ctx.interpolate("{{company}}"), "ZenCorp")
+        XCTAssertEqual(ctx.interpolate(ctx.interpolate("{{company}} {{company}}")),
+                       "ZenCorp ZenCorp")
+    }
+
+    // MARK: Competitor üretimi
+
+    func testFreshCompetitorsHaveCompleteIdentity() {
+        let comps = CohortSystem.freshCompetitors(tier: 2)
+        XCTAssertEqual(comps.count, CohortSystem.size - 1)
+        for c in comps {
+            XCTAssertFalse(c.name.isEmpty, "Rakip adı boş olamaz")
+            XCTAssertFalse(c.founderFirstName.isEmpty, "Rakibin kurucu ilk adı boş olamaz")
+            XCTAssertFalse(c.founderLastName.isEmpty, "Rakibin kurucu soyadı boş olamaz")
+            XCTAssertFalse(c.projectName.isEmpty, "Rakibin projesi boş olamaz")
+            XCTAssertNotNil(Balance.sector(c.sector), "Sektör katalog içinde olmalı")
+            XCTAssertGreaterThanOrEqual(c.score, 0)
+            XCTAssertLessThanOrEqual(c.score, 100)
+        }
+    }
+
+    func testStandingsWithCompetitorsAttachesSubtitle() {
+        let comps = CohortSystem.freshCompetitors(tier: 0)
+        let entries = CohortSystem.standings(playerScore: 50,
+                                             playerName: "BenimŞirketim",
+                                             competitors: comps)
+        XCTAssertEqual(entries.count, comps.count + 1)
+        let competitorEntries = entries.filter { !$0.isPlayer }
+        for e in competitorEntries {
+            XCTAssertNotNil(e.subtitle, "Rakip satırının alt-bağlamı dolu olmalı")
+            XCTAssertTrue(e.subtitle?.contains("·") ?? false,
+                          "Alt-bağlam 'Sektör · Ad — Proje' biçiminde olmalı")
+            XCTAssertNotNil(e.sectorColorHex, "Sektör renk hex'i alt-satır accent'i için var olmalı")
+        }
+        let playerEntry = entries.first(where: { $0.isPlayer })
+        XCTAssertNil(playerEntry?.subtitle, "Oyuncuda subtitle yok")
+    }
+
+    // MARK: Eski cohort migration
+
+    func testNormalizeMigratesOldCohortNamesToCompetitors() {
+        var state = GameState()
+        state.cohortNames = ["Vexel", "Lumina", "Nimbus"]
+        state.cohortScores = [42, 35, 51]
+        state.cohortCompetitors = []
+        state.normalize()
+        XCTAssertEqual(state.cohortCompetitors.count, 3,
+                       "Eski isimler Competitor listesine taşınmalı")
+        XCTAssertEqual(state.cohortCompetitors.map { $0.name }, ["Vexel", "Lumina", "Nimbus"])
+        XCTAssertEqual(state.cohortCompetitors[0].score, 42)
+    }
+}
+

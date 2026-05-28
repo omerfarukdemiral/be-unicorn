@@ -9,6 +9,18 @@
 
 ---
 
+## 0a. SİM SENKRONU (2026-05-29) — audit #3/#18 düzeltmesi
+
+Sim, `Balance.swift`'ten sapmıştı; **birebir senkronlandı**:
+- **ARPU evre çarpanı** (`arpuMultiplier = 1.15^stage`) sim'e EKLENDİ — eskiden yoktu, üst evrelerde gerçek MRR rapordan ~%30-40 yüksekti. Artık rapor gerçeği yansıtıyor.
+- `cacStageScaling` 1.25 → **1.30** · `moraleAdjustRate` 0.08 → **0.05** · `monthsPerSprint` 0.5 → **1.0** · `decisionMin/Max` 22/40 → **18/30** · modül `costGrowth` id2/id5/id7 5.0/5.0/4.5 → **4.0**.
+
+**Senkron sonrası sonuç (kararlar hariç temel eğri):** 4/4 arketip Unicorn'a varıyor, en hızlı 44d / en yavaş 52d, **oran 1.16x** (sağlıklı bant <2.0x) → çoklu-yol dengesi TAMAM ✅.
+
+**AÇIK BULGU (audit #17 — beklemede):** senkron sonrası geç-oyun **LTV:CAC 14–73** çıkıyor (sağlıklı ~3–5, harika ~10–15). `salesPower`/ARPU ve LTV üst-sınırsız → geç-oyun "çok kolay" ve "satışçı yığ" baskın mikro-strateji olabilir. Doygunluk/tavan uygulanmalı (kalan yol haritası).
+
+---
+
 ## 0. Model değişikliği (bu sürüm) — yeni ekonomi
 
 Önceki sürümde burn tek bir `fixedMonthlyCost(stage)` tablosuydu ve büyüme tek

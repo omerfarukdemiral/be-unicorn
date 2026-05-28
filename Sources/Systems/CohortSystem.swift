@@ -7,12 +7,29 @@ import Foundation
 // Mantık burada izole — GameModel sadece çağırır, GameState veriyi saklar.
 
 /// Leaderboard'da gösterilen tek bir sıralama satırı (oyuncu ya da rakip).
+/// `subtitle` rakipler için sektör + kurucu + proje bağlamı taşır (UI alt satırı).
+/// Oyuncuda nil — kendi şirketinin bilgilerini başka yerde görür.
 struct StandingEntry: Identifiable {
     let id: Int          // -1 = oyuncu; >=0 rakip kohort indeksi
     let name: String
     let score: Double    // çeyrek performans skoru (0-100 ölçeği)
     let isPlayer: Bool
     var rank: Int = 0    // 1'den (sıralama sonrası doldurulur)
+    var subtitle: String? = nil   // "Fintech · Eren K. — Atlas" gibi (rakipler için)
+    var sectorColorHex: String? = nil   // alt satır accent rengi
+}
+
+/// Tek bir rakip startup — kalıcı kimlik + canlı skor. Kohort bu tipte saklanır.
+struct Competitor: Codable, Identifiable, Equatable {
+    var id: UUID = UUID()
+    var name: String                 // şirket adı, örn. "Nimbus"
+    var sector: Int                  // Balance.sectors index
+    var founderFirstName: String
+    var founderLastName: String
+    var projectName: String          // tek bir flagship proje adı
+    var score: Double                // canlı çeyrek skoru (0-100)
+
+    var founderFullName: String { "\(founderFirstName) \(founderLastName)" }
 }
 
 /// Çeyrek kapanışında oyuncunun ligini sıralamaya göre nasıl değiştireceği.
@@ -48,16 +65,35 @@ enum CohortSystem {
     }
 
     /// Çeyrek başı için taze kohort üret: rastgele isimler + başlangıç skorları.
-    /// Oyuncu HARİÇ `size - 1` rakip döner (isim + başlangıç skoru paralel diziler).
+    /// **DEPRECATED**: yeni kod `freshCompetitors(tier:)` kullansın. Eski save
+    /// dönüşüm yolu için tutuluyor.
     static func freshCohort(tier: Int) -> (names: [String], scores: [Double]) {
+        let competitors = freshCompetitors(tier: tier)
+        return (competitors.map { $0.name }, competitors.map { $0.score })
+    }
+
+    /// Zenginleştirilmiş rakip kohortu: her rakibin **sektör + kurucu + proje + skor**'u var.
+    /// Leaderboard'da "Voltius (Fintech · Eren K.) — Atlas" gibi bağlam gösterilebilir.
+    /// Sıralama deterministik DEĞİL (isim/sektör/proje/founder ayrı havuzlardan shuffled).
+    static func freshCompetitors(tier: Int) -> [Competitor] {
         let band = powerBand(tier: tier)
         let count = size - 1
         let names = Array(namePool.shuffled().prefix(count))
-        let scores = (0..<count).map { _ -> Double in
-            // Başlangıçta düşük skor (çeyrek yeni başladı); bandın alt diliminden.
-            Double.random(in: max(0, band.low - 18) ... max(1, band.low - 4))
+        let sectorIDs = Balance.sectors.shuffled().map { $0.id }
+        var first = NarrativeContent.founderFirstNames.shuffled()
+        var last = NarrativeContent.founderLastNames.shuffled()
+        var projects = NarrativeContent.projectNameSeeds.shuffled()
+
+        return names.enumerated().map { idx, name in
+            let sec = sectorIDs[idx % sectorIDs.count]
+            let firstN = first.isEmpty ? "Ada" : first.removeLast()
+            let lastN  = last.isEmpty ? "Yılmaz" : last.removeLast()
+            let proj   = projects.isEmpty ? "Atlas" : projects.removeLast()
+            let startScore = Double.random(in: max(0, band.low - 18) ... max(1, band.low - 4))
+            return Competitor(name: name, sector: sec,
+                              founderFirstName: firstN, founderLastName: lastN,
+                              projectName: proj, score: startScore)
         }
-        return (names, scores)
     }
 
     /// Bir tick'te rakip skorlarını ilerlet (oyun temposuyla). Her rakip kendi
@@ -80,8 +116,27 @@ enum CohortSystem {
         }
     }
 
+    /// Rakip kohortunu (Competitor listesi) bir tick ilerlet — skorlar canlı leaderboard'da.
+    /// Aynı algoritma (powerBand + yumuşak yaklaşım + titreşim), Competitor üzerinde çalışır.
+    static func advancedCompetitors(_ competitors: [Competitor], tier: Int,
+                                    progress: Double, dt: Double) -> [Competitor] {
+        let band = powerBand(tier: tier)
+        let span = band.high - band.low
+        return competitors.enumerated().map { idx, c in
+            let seat = Double((idx * 37) % 100) / 100.0
+            let ceiling = band.low + seat * span
+            let target = ceiling * (0.55 + 0.45 * min(1, max(0, progress)))
+            let approach = (target - c.score) * min(1, 0.05 * dt)
+            let jitter = Double.random(in: -0.15 ... 0.2) * dt
+            var fixed = c
+            fixed.score = min(100, max(0, c.score + approach + jitter))
+            return fixed
+        }
+    }
+
     /// Oyuncu + rakipleri tek listede skora göre sırala (yüksek skor üstte).
     /// `rank` 1'den doldurulur. Beraberlikte oyuncu önde sayılır (lehte yuvarlama).
+    /// **DEPRECATED**: yeni kod `standings(playerScore:playerName:competitors:)` kullansın.
     static func standings(playerScore: Double, playerName: String,
                           cohortNames: [String], cohortScores: [Double]) -> [StandingEntry] {
         var entries: [StandingEntry] = [
@@ -90,6 +145,28 @@ enum CohortSystem {
         for (i, name) in cohortNames.enumerated() {
             let sc = i < cohortScores.count ? cohortScores[i] : 0
             entries.append(StandingEntry(id: i, name: name, score: sc, isPlayer: false))
+        }
+        entries.sort { a, b in
+            if abs(a.score - b.score) < 0.0001 { return a.isPlayer && !b.isPlayer }
+            return a.score > b.score
+        }
+        for i in entries.indices { entries[i].rank = i + 1 }
+        return entries
+    }
+
+    /// Zenginleştirilmiş standings: rakiplerin alt-satırına sektör + kurucu + proje bağlamı düşer.
+    static func standings(playerScore: Double, playerName: String,
+                          competitors: [Competitor]) -> [StandingEntry] {
+        var entries: [StandingEntry] = [
+            StandingEntry(id: -1, name: playerName, score: playerScore, isPlayer: true)
+        ]
+        for (i, c) in competitors.enumerated() {
+            let sectorName = Balance.sector(c.sector)?.name ?? "Teknoloji"
+            let sectorColor = Balance.sector(c.sector)?.colorHex
+            let subtitle = "\(sectorName) · \(c.founderFirstName) — \(c.projectName)"
+            entries.append(StandingEntry(
+                id: i, name: c.name, score: c.score, isPlayer: false,
+                subtitle: subtitle, sectorColorHex: sectorColor))
         }
         entries.sort { a, b in
             if abs(a.score - b.score) < 0.0001 { return a.isPlayer && !b.isPlayer }
