@@ -1156,6 +1156,7 @@ final class GameModel: ObservableObject {
         if card.once || !state.seenEventIDs.contains(card.id) {
             state.seenEventIDs.append(card.id)
         }
+        let wasFirstDecision = (state.totalDecisions == 0)   // HZ-1 tebriği için (artıştan ÖNCE)
         state.totalDecisions += 1
         state.dailyDecisions += 1                       // günlük hedef ilerlemesi
         pendingEvent = nil
@@ -1163,10 +1164,15 @@ final class GameModel: ObservableObject {
         // #26: sonuç artık 3.5sn toast'ta UÇMUYOR — kalıcı, kapatılabilir bir kartta
         // gösterilir + "ilgili ders" köprüsü taşır (en zengin eğitici içerik korunur).
         if let line = choice.resultLine {
-            pendingResult = DecisionResult(text: line,
+            // HZ-1: ilk kararda tebriği sonuç kartına ekle (tek yüzey — toast z-order
+            // çakışması olmadan, suçlamasız "ilk bahsini koydun" dokunuşu).
+            let text = wasFirstDecision ? line + "\n\n" + NarrativeContent.firstDecisionPraise : line
+            pendingResult = DecisionResult(text: text,
                                            speaker: card.speaker,
                                            categoryRaw: card.category.rawValue,
                                            mechanic: card.category.lessonMechanic)
+        } else if wasFirstDecision {
+            pendingToast = NarrativeContent.firstDecisionPraise
         }
         Feedback.tap()   // karar verildi
         clamp()
@@ -1308,6 +1314,7 @@ final class GameModel: ObservableObject {
 
         let monthFraction = dt / Balance.secondsPerMonth
         advanceEconomy(monthFraction)
+        maybeCelebrateUserMilestone()    // HZ-2: ilk 100/1000 kullanıcı eşik kutlaması (bir kez)
         advanceProjects(monthFraction)   // geliştirilen projeler ilerler, biten yayına girer
         updateMorale(dt)
         maybeQuit(dt)
@@ -1361,6 +1368,19 @@ final class GameModel: ObservableObject {
         let repBaseline = min(100, 20 + itemReputationBonus + projectReputationBonus)
         state.reputation += (repBaseline - state.reputation) * 0.002
         state.reputation = min(100, max(0, state.reputation))
+    }
+
+    /// HZ-2: kullanıcı eşiklerini (100, 1000) ilk geçişte BİR KEZ kutla (kalıcı flag).
+    /// pendingToast yolu (overlay yarışı yok). Eğitici dokunuş — ölçeklenmeyen işler / churn.
+    private func maybeCelebrateUserMilestone() {
+        for m in NarrativeContent.userMilestones where state.users >= Double(m)
+            && !state.celebratedUserMilestones.contains(m) {
+            state.celebratedUserMilestones.append(m)
+            if let msg = NarrativeContent.userMilestonePraise(m) {
+                pendingToast = msg
+                Feedback.success()
+            }
+        }
     }
 
     private func recordHistory() {
@@ -1432,6 +1452,8 @@ final class GameModel: ObservableObject {
         }
         state.members.insert(founderMember, at: 0)
         state.normalize()   // headcount ile yeniden senkronla (her ihtimale karşı)
+        // HZ-4: ilk oturum karşılaması — kuruluş biter bitmez sıcak, eğitici bir dokunuş.
+        pendingToast = NarrativeContent.firstSessionWelcome
         save()
     }
 

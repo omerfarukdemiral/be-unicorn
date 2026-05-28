@@ -53,6 +53,7 @@ struct GameState: Codable {
 
     // Zaman & istatistik
     var months: Double = 0             // şirket yaşı (oyun-ayı, kesirli)
+    var celebratedUserMilestones: [Int] = []  // HZ-2: kutlanan kullanıcı eşikleri (bir kez)
     var totalDecisions: Int = 0
     var totalHires: Int = 0
     var bankruptcies: Int = 0
@@ -169,6 +170,7 @@ struct GameState: Codable {
         moraleTargetBonus = g(.moraleTargetBonus, 0)
         crisisChainCount = g(.crisisChainCount, 0)
         months = g(.months, 0)
+        celebratedUserMilestones = g(.celebratedUserMilestones, [Int]())
         totalDecisions = g(.totalDecisions, 0)
         totalHires = g(.totalHires, 0)
         bankruptcies = g(.bankruptcies, 0)

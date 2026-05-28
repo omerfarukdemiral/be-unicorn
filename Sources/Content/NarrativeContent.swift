@@ -2,6 +2,25 @@ import Foundation
 
 /// Kurucu ipuçları & anlatı satırları (Türkçe). İçerik ajanı genişletir.
 enum NarrativeContent {
+    /// İlk oturum karşılaması (HZ-4) — kuruluş biter bitmez gösterilir.
+    static let firstSessionWelcome =
+        "İlk işin para kazanmak değil — birinin senin ürününü gerçekten istediğini bulmak. Geri kalan her şey bunun üstüne kurulur."
+
+    /// İlk karar tebriği (HZ-1) — oyuncunun verdiği ilk kararın ardından.
+    static let firstDecisionPraise =
+        "İlk kararını verdin — tek doğru cevap yoktu, sen kendi bahsini koydun. Kararlarının dersleri artık Defter'de birikiyor."
+
+    /// Kullanıcı eşiği kutlamaları (HZ-2) — ilk kez geçişte bir kez.
+    static func userMilestonePraise(_ milestone: Int) -> String? {
+        switch milestone {
+        case 100:  return "İlk 100 kullanıcı! Bunlar en değerli kullanıcıların — her birini tanı, elle onboard et. Ölçeklenmeyen işler şimdi en kıymetli içgörüyü verir."
+        case 1000: return "1.000 kullanıcı! Artık motor dönüyor. Şimdi soru değişiyor: kaç tanesi geri geliyor? Churn sessizce büyümeni yiyebilir."
+        default:   return nil
+        }
+    }
+    /// Kutlanacak kullanıcı eşikleri (artan sırada).
+    static let userMilestones: [Int] = [100, 1000]
+
     static let tips: [String] = [
         "Runway her şeydir. Nakit biterse oyun biter.",
         "Mutlu ekip = üretken ekip. Morali izle.",
