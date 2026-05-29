@@ -20,6 +20,16 @@ final class GameModel: ObservableObject {
     @Published var pendingToast: String? = nil
     @Published var pendingResult: DecisionResult? = nil   // karar sonucu kalıcı kartı (#26) + ders köprüsü
     @Published var inspectedMechanic: String? = nil       // #19: ℹ/metrik/sonuç → ilgili Defter dersi
+
+    /// B1: bu oyunda en çok dokunulan ilk 3 karar mekaniği (frekansa göre azalan;
+    /// eşitlikte mechanic adına göre stabil sıralı). FounderScorecardData ile 'en
+    /// pahalı 3 ders'e çevrilir. Boşsa Karne 'Henüz yeterli karar' fallback'i gösterir.
+    var topTouchedMechanics: [String] {
+        state.mechanicTouchCounts
+            .sorted { ($0.value, $1.key) > ($1.value, $0.key) }
+            .prefix(3)
+            .map { $0.key }
+    }
     @Published var inspectedDept: Int? = nil   // ofiste çalışana tıklanınca açılan kart
     @Published var founderTip: String = NarrativeContent.tips.first ?? ""
     /// HUD üstünde yüzen ±tutar çipi için son ayrık nakit hareketi (kazanç/harcama).
@@ -1159,6 +1169,12 @@ final class GameModel: ObservableObject {
         }
         let wasFirstDecision = (state.totalDecisions == 0)   // HZ-1 tebriği için (artıştan ÖNCE)
         state.totalDecisions += 1
+        // B1: dokunulan karar mekaniğini say (Kurucu Karnesi 'en pahalı 3 ders' için).
+        // Mentor-tip jenerik/etkisiz fallback kartı — sayma (gerçek karar değil).
+        if card.id != "mentor-tip" {
+            let m = card.category.lessonMechanic
+            state.mechanicTouchCounts[m, default: 0] += 1
+        }
         state.dailyDecisions += 1                       // günlük hedef ilerlemesi
         pendingEvent = nil
         scheduleNextDecision()

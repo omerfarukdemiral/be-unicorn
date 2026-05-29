@@ -130,6 +130,7 @@ struct WinView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
     @State private var appeared = false
+    @State private var showScorecard = false   // B2: Kurucu Karnesi sunumu
 
     private var league: LeagueDef { model.currentLeague }
     private var seasonTitle: SeasonTitleDef { model.currentSeasonTitle }
@@ -185,13 +186,23 @@ struct WinView: View {
                 .overlay(RoundedRectangle(cornerRadius: Radius.m)
                     .stroke(Palette.unicorn.opacity(0.25), lineWidth: 1))
 
+                // B2: Kurucu Karnesi — nihai içgörü teslimatı (değer kanıtı).
+                Button { Haptics.selection(); showScorecard = true } label: {
+                    HStack(spacing: Space.s2) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                        Text("Kurucu Karnesini Gör").font(.bodyL)
+                    }
+                    .modifier(AppButton.secondary(theme))
+                }
+                .buttonStyle(.pressable)
+                .padding(.top, Space.s1)
+
                 Button { Haptics.tap(); model.dismissWin() } label: {
                     Text("İmparatorluğu Yönetmeye Devam").font(.bodyL)
                         .modifier(ButtonChrome(bg: Palette.unicorn, fg: .white,
                                                glow: Palette.unicorn, height: AppButton.height))
                 }
                 .buttonStyle(.pressable)
-                .padding(.top, Space.s1)
             }
             .padding(Space.s6).frame(maxWidth: 350)
             .padding(.horizontal, Space.s5)
@@ -200,6 +211,9 @@ struct WinView: View {
         .onAppear {
             Haptics.success()
             withAnimation(Motion.bouncy) { appeared = true }
+        }
+        .fullScreenCover(isPresented: $showScorecard) {
+            FounderScorecardView(model: model, theme: theme, onClose: { showScorecard = false })
         }
     }
 

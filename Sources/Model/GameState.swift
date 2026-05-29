@@ -55,6 +55,10 @@ struct GameState: Codable {
     var months: Double = 0             // şirket yaşı (oyun-ayı, kesirli)
     var celebratedUserMilestones: [Int] = []  // HZ-2: kutlanan kullanıcı eşikleri (bir kez)
     var totalDecisions: Int = 0
+    /// B1: Oyuncunun bu oyunda dokunduğu karar mekaniklerinin frekansı (mentor-tip hariç).
+    /// Kurucu Karnesi'nin "en pahalı 3 ders" türetmesini besler. Additive Codable —
+    /// eski save'de yoksa boş gelir, decode patlamaz.
+    var mechanicTouchCounts: [String: Int] = [:]
     var totalHires: Int = 0
     var bankruptcies: Int = 0
     var founderXP: Double = 0          // NG+ kalıcı çarpan kaynağı
@@ -174,6 +178,7 @@ struct GameState: Codable {
         months = g(.months, 0)
         celebratedUserMilestones = g(.celebratedUserMilestones, [Int]())
         totalDecisions = g(.totalDecisions, 0)
+        mechanicTouchCounts = g(.mechanicTouchCounts, [String: Int]())
         totalHires = g(.totalHires, 0)
         bankruptcies = g(.bankruptcies, 0)
         founderXP = g(.founderXP, 0)

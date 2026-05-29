@@ -9,6 +9,7 @@ struct SeasonFinaleView: View {
     var theme: Theme
     let finale: SeasonFinale
     @State private var appeared = false
+    @State private var showScorecard = false   // B2: Kurucu Karnesi sunumu
 
     private var titleColor: Color { Color(hex: finale.title.colorHex) }
 
@@ -31,6 +32,16 @@ struct SeasonFinaleView: View {
                     summaryCard
                     rewardCard
 
+                    // B2: Kurucu Karnesi — sezon içgörü teslimatı.
+                    Button { Haptics.selection(); showScorecard = true } label: {
+                        HStack(spacing: Space.s2) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                            Text("Kurucu Karnesini Gör").font(.bodyL)
+                        }
+                        .modifier(AppButton.secondary(theme))
+                    }
+                    .buttonStyle(.pressable)
+
                     Button { Haptics.tap(); model.startNextSeason() } label: {
                         Text("Yeni Sezon").font(.bodyL)
                             .modifier(ButtonChrome(bg: Palette.gold, fg: Color(hex: "1A1320"),
@@ -52,6 +63,9 @@ struct SeasonFinaleView: View {
         .onAppear {
             Haptics.success()
             withAnimation(Motion.bouncy) { appeared = true }
+        }
+        .fullScreenCover(isPresented: $showScorecard) {
+            FounderScorecardView(model: model, theme: theme, onClose: { showScorecard = false })
         }
     }
 

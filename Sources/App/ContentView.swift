@@ -171,6 +171,10 @@ struct ContentView: View {
                     let mech = args[i + 1]
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { model.inspectedMechanic = mech }
                 }
+                // QA: --demo-win → Win ekranını (+ Kurucu Karnesi) açılışta göster.
+                if args.contains("--demo-win") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.pendingWin = true }
+                }
                 // Not: --force-decision GameModel.init içinde de işlenir (model katmanına da).
             }
         }
