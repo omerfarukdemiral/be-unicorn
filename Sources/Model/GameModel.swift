@@ -1611,9 +1611,18 @@ final class GameModel: ObservableObject {
         SaveManager.save(state)
     }
 
-    func saveOnBackground() { save() }
+    func saveOnBackground() {
+        save()
+        // D2 (#5): arka plana alınırken nazik hatırlatmaları planla (baskısız).
+        // streak-risk yalnız korunacak bir seri varsa planlanır; ayrıca ~24sa dönüş daveti.
+        // İzin yoksa no-op (status kontrollü).
+        NotificationManager.scheduleReminders(streak: state.streak, dailyCompleted: state.dailyCompleted)
+    }
 
     func refreshOnForeground() {
+        // D2 (#5): oyuncu geri döndü — bekleyen tüm planlı bildirimleri iptal et
+        // (içerideyken bildirim göndermek anlamsız + rahatsız edici).
+        NotificationManager.cancelAll()
         applyOfflineProgress()
         refreshDailyGoalIfNeeded()   // arka planda gün değiştiyse streak/görevleri yenile
         lastTick = Date()

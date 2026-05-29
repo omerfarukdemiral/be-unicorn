@@ -198,6 +198,12 @@ struct ContentView: View {
             showToast(new, urgent: false)
             model.pendingToast = nil
         }
+        .onChange(of: model.companySetupComplete) { _, complete in
+            // D2 (#5): bildirim iznini şirket-kuruluşu BİTTİKTEN sonra (doğal an) iste —
+            // yalnız daha önce karar verilmemişse sistem diyaloğu gösterilir; reddedilse
+            // bile oyun bildirimsiz tam çalışır.
+            if complete { NotificationManager.requestAuthorizationIfNeeded() }
+        }
     }
 
     private func showToast(_ text: String, urgent: Bool) {
