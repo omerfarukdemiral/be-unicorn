@@ -846,6 +846,54 @@ enum DecisionContent {
                       result: "Genel artış. (Fiyat değişimi ürün değişimi gibi iletilirse kabul edilir; sessiz artış güveni en çabuk yer.)")
             ]),
 
+        // MARK: - Gecikmeli/zincirleme pilot kartları (#6 — D1)
+        // KURAL-0: gerçek davranış DecisionChoice.delayed + resolvePendingEffects() ile üretilir.
+
+        DecisionCard("delayed-fasthire", category: .team, speaker: "Operasyon", icon: "⚡️",
+            prompt: "{{company}} hızlı büyüyor. Bu ay 3 kişiyi hızlıca, eleme yapmadan işe alabilirsin — boşlukları hemen kapatır.",
+            trigger: .minStage(1),
+            choices: [
+                .init("Hızlı al, sonra düşün", detail: "+anlık hız / 2 ay sonra uyum sancısı",
+                      effects: [.morale(3), .usersPercent(0.02)],
+                      result: "Boşluklar doldu. (Yanlış işe alımın faturası genelde aylar sonra gelir.)",
+                      delayed: [DelayedEffect(delayMonths: 2,
+                          effects: [.morale(-6), .moraleTargetBonus(-1)],
+                          note: "Hatırlıyor musun — 2 ay önce eleme yapmadan hızlı işe almıştın. Uyum sorunları morali yordu. (Hızlı işe alım, yavaş pişmanlık.)")]),
+                .init("Yavaş ve seçici al", detail: "−anlık hız / +kalıcı uyum",
+                      effects: [.moraleTargetBonus(1), .reputation(2), .usersPercent(-0.01)],
+                      result: "Daha yavaş ama daha sağlam ekip. (İşe almada acele, çıkarmada pişmanlık.)")
+            ]),
+
+        DecisionCard("delayed-techdebt", category: .product, speaker: "CTO", icon: "🧱",
+            prompt: "Teslim tarihine yetişmek için kısa yoldan, test yazmadan gönderebiliriz. Şimdi hızlı; ama kod borcu birikir.",
+            trigger: .minUsers(500),
+            choices: [
+                .init("Kısa yoldan gönder", detail: "+anlık büyüme / 3 ay sonra kırılganlık",
+                      effects: [.usersPercent(0.05)],
+                      result: "Zamanında çıktı. (Borç bedava değil; faizi sonra kesilir.)",
+                      delayed: [DelayedEffect(delayMonths: 3,
+                          effects: [.reputation(-5), .usersPercent(-0.04)],
+                          note: "3 ay önce test yazmadan gönderdiğin sürüm patladı — bazı kullanıcılar küstü. (Teknik borç faizini hep öder.)")]),
+                .init("Sağlam yap, geç çık", detail: "−anlık hız / +dayanıklılık",
+                      effects: [.reputation(3), .moraleTargetBonus(1)],
+                      result: "Yavaş ama sağlam. (Erken hız her zaman erken kazanç değildir.)")
+            ]),
+
+        DecisionCard("delayed-discount", category: .market, speaker: "Satış", icon: "🏷️",
+            prompt: "Büyük indirimle bu ay kullanıcı sayısını şişirebiliriz. Rakamlar parlar — ama gelen kullanıcı fiyat-hassas olur.",
+            trigger: .minStage(2),
+            choices: [
+                .init("Agresif indirim ver", detail: "+anlık kullanıcı / 2 ay sonra churn dalgası",
+                      effects: [.usersPercent(0.08)],
+                      result: "Sayılar fırladı. (Yanlış kullanıcıyı çekmek, hiç çekmemekten pahalı olabilir.)",
+                      delayed: [DelayedEffect(delayMonths: 2,
+                          effects: [.usersPercent(-0.06), .reputation(-2)],
+                          note: "İndirimle gelen kullanıcılar 2 ay sonra ayrıldı — fiyat artınca kaldılar mı? Hayır. (İndirim sadakat satın almaz.)")]),
+                .init("Tam fiyat, doğru müşteri", detail: "−anlık sayı / +kaliteli taban",
+                      effects: [.reputation(3), .moraleTargetBonus(1)],
+                      result: "Daha az ama doğru müşteri. (Vanity metrik değil, kalıcı gelir.)")
+            ]),
+
         // MARK: - Geç-oyun: Çıkış, Halka Arz & Kurumsal Olgunluk (#16)
 
         DecisionCard("ipo-vs-stay-private", category: .investor, speaker: "Yatırım Bankacısı", icon: "🔔",

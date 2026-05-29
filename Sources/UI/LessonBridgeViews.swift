@@ -9,7 +9,7 @@ struct DecisionResult: Identifiable, Equatable {
     let text: String          // seçimin sonucu (en zengin eğitici içerik)
     let speaker: String       // kararı veren bağlam (kart konuşmacısı)
     let categoryRaw: String   // DecisionCategory.rawValue (tint için)
-    let mechanic: String      // ilgili Defter dersi mekaniği (#19 köprüsü)
+    let mechanic: String?     // ilgili Defter dersi mekaniği (#19 köprüsü) — yoksa köprü gösterilmez
 }
 
 // MARK: - Sonuç kartı (#26) — kalıcı, ders köprülü
@@ -32,7 +32,10 @@ struct ResultCardView: View {
         }
     }
 
-    private var relatedLesson: LessonEntry? { LessonsContent.lesson(for: result.mechanic) }
+    private var relatedLesson: LessonEntry? {
+        guard let m = result.mechanic else { return nil }
+        return LessonsContent.lesson(for: m)
+    }
 
     var body: some View {
         ZStack {

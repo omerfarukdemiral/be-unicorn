@@ -51,6 +51,11 @@ struct GameState: Codable {
     // strained→crisis geçişinde artar, healthy'e dönünce 0'a sıfırlanır (zincir izleme).
     var crisisChainCount: Int = 0
 
+    // Gecikmeli/zincirleme etki kuyruğu (#6 — D1). resolve() zaman-damgalı ekler,
+    // tick() vadesi gelenleri (applyAtMonth <= months) uygular + kuyruktan çıkarır.
+    // Codable + decodeIfPresent → eski save'ler çökmez, kill/relaunch kuyruk geri yüklenir.
+    var pendingEffects: [PendingEffect] = []
+
     // Zaman & istatistik
     var months: Double = 0             // şirket yaşı (oyun-ayı, kesirli)
     var celebratedUserMilestones: [Int] = []  // HZ-2: kutlanan kullanıcı eşikleri (bir kez)
@@ -175,6 +180,7 @@ struct GameState: Codable {
         pendingEventID = ((try? c.decodeIfPresent(String.self, forKey: .pendingEventID)) ?? nil)
         moraleTargetBonus = g(.moraleTargetBonus, 0)
         crisisChainCount = g(.crisisChainCount, 0)
+        pendingEffects = g(.pendingEffects, [PendingEffect]())
         months = g(.months, 0)
         celebratedUserMilestones = g(.celebratedUserMilestones, [Int]())
         totalDecisions = g(.totalDecisions, 0)

@@ -1167,6 +1167,13 @@ final class GameModel: ObservableObject {
         if card.once || !state.seenEventIDs.contains(card.id) {
             state.seenEventIDs.append(card.id)
         }
+
+        // #6 (D1): seçimin gecikmeli etkilerini zaman-damgalı kuyruğa al.
+        // applyAtMonth = şu anki oyun-ayı + delayMonths; tick() vadesi gelince uygular.
+        for d in choice.delayed {
+            state.pendingEffects.append(PendingEffect(applyAtMonth: state.months + d.delayMonths,
+                                                      effects: d.effects, note: d.note))
+        }
         let wasFirstDecision = (state.totalDecisions == 0)   // HZ-1 tebriği için (artıştan ÖNCE)
         state.totalDecisions += 1
         // B1: dokunulan karar mekaniğini say (Kurucu Karnesi 'en pahalı 3 ders' için).
@@ -1334,6 +1341,7 @@ final class GameModel: ObservableObject {
         maybeCelebrateUserMilestone()    // HZ-2: ilk 100/1000 kullanıcı eşik kutlaması (bir kez)
         maybeDetectArchetype()           // C3: runtime arketibi gerçek duruma göre güncelle (yapışkan)
         advanceProjects(monthFraction)   // geliştirilen projeler ilerler, biten yayına girer
+        resolvePendingEffects()          // #6 (D1): vadesi gelen gecikmeli etkileri uygula + hatırlat
         updateMorale(dt)
         maybeQuit(dt)
 
@@ -1386,6 +1394,34 @@ final class GameModel: ObservableObject {
         let repBaseline = min(100, 20 + itemReputationBonus + projectReputationBonus)
         state.reputation += (repBaseline - state.reputation) * 0.002
         state.reputation = min(100, max(0, state.reputation))
+    }
+
+    /// #6 (D1): Vadesi gelen (applyAtMonth <= months) gecikmeli etkileri uygula,
+    /// not'u oyuncuya göster, kuyruktan çıkar. Aynı tick'te birden çok vade dolarsa
+    /// hepsi uygulanır; en sonuncusunun notu pendingResult/pendingToast'a yazılır
+    /// (overlay yarışı yok — mevcut tek-yüzey deseni). Karar kartı açıksa toast'a düşer.
+    private func resolvePendingEffects() {
+        guard !state.pendingEffects.isEmpty else { return }
+        let due = state.pendingEffects.filter { $0.applyAtMonth <= state.months }
+        guard !due.isEmpty else { return }
+        state.pendingEffects.removeAll { $0.applyAtMonth <= state.months }
+        var lastNote: String? = nil
+        for pe in due {
+            for ce in pe.effects { if let eff = ce.effect { apply(eff) } }
+            if !pe.note.isEmpty { lastNote = pe.note }
+        }
+        clamp()
+        if let note = lastNote {
+            // Karar kartı açık değilse zengin sonuç kartı; açıksa çakışmamak için toast.
+            if pendingEvent == nil && pendingResult == nil {
+                pendingResult = DecisionResult(text: note, speaker: "Geçmiş Kararın",
+                                               categoryRaw: DecisionCategory.opportunity.rawValue,
+                                               mechanic: nil)
+            } else {
+                pendingToast = note
+            }
+            Feedback.warning()
+        }
     }
 
     /// HZ-2: kullanıcı eşiklerini (100, 1000) ilk geçişte BİR KEZ kutla (kalıcı flag).

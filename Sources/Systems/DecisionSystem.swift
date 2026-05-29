@@ -45,12 +45,15 @@ struct DecisionChoice {
     let detail: String?        // sonucun kısa ipucu (kartta gri yazı)
     let effects: [DecisionEffect]
     let resultLine: String?    // seçimden sonra kısa toast
+    let delayed: [DelayedEffect]   // #6 (D1): gelecekte uygulanacak gecikmeli etkiler (varsayılan boş)
 
-    init(_ label: String, detail: String? = nil, effects: [DecisionEffect], result: String? = nil) {
+    init(_ label: String, detail: String? = nil, effects: [DecisionEffect],
+         result: String? = nil, delayed: [DelayedEffect] = []) {
         self.label = label
         self.detail = detail
         self.effects = effects
         self.resultLine = result
+        self.delayed = delayed
     }
 }
 
