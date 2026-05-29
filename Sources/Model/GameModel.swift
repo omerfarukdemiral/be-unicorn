@@ -47,6 +47,7 @@ final class GameModel: ObservableObject {
     private var sinceHistory: Double = 0
     private var sinceTip: Double = 0
     private var sinceDecision: Double = 0
+    private var sinceDecisionReal: Double = 0   // gerçek-saniye sayacı (hız'dan bağımsız taban)
     private var nextDecisionAt: Double = Balance.decisionMinInterval
     private var debtMonths: Double = 0
 
@@ -1166,11 +1167,23 @@ final class GameModel: ObservableObject {
     private func scheduleNextDecision() {
         nextDecisionAt = Double.random(in: Balance.decisionMinInterval...Balance.decisionMaxInterval)
         sinceDecision = 0
+        sinceDecisionReal = 0
+    }
+
+    /// Ekranda halihazırda BİR overlay/popup açık mı? Açıksa yeni karar kartı çıkmaz
+    /// (üst üste binme = "durmadan popup" hissinin ana kaynağıydı). Oyuncu mevcut
+    /// popup'ı kapatıp ofisle oynayabilsin diye karar bekler.
+    var anyBlockingOverlay: Bool {
+        pendingEvent != nil || pendingResult != nil || pendingScenarioResult != nil
+            || pendingCycleReview != nil || pendingSeasonFinale != nil || pendingDailyClose != nil
+            || pendingFundingStage != nil || pendingSeriesAGate || pendingWin || pendingBankruptcy
+            || inspectedMechanic != nil || inspectedDept != nil || pendingOfflineReport != nil
     }
 
     private func maybeTriggerDecision() {
-        guard pendingEvent == nil, pendingFundingStage == nil, !pendingWin, !pendingBankruptcy else { return }
+        guard !anyBlockingOverlay else { return }                  // başka popup açıkken bekle
         guard sinceDecision >= nextDecisionAt else { return }
+        guard sinceDecisionReal >= Balance.decisionMinRealSeconds else { return }  // gerçek-zaman tabanı (kart yağmuru engeli)
         guard let card = DecisionSystem.pick(for: self, state: state) else {
             sinceDecision = 0   // uygun kart yok, biraz sonra tekrar dene
             return
@@ -1395,6 +1408,7 @@ final class GameModel: ObservableObject {
         checkDailyCompletion()
 
         sinceDecision += dt
+        sinceDecisionReal += realDt
         maybeTriggerDecision()
 
         sinceAutosave += realDt

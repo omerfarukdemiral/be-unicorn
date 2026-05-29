@@ -257,10 +257,14 @@ enum Balance {
     static let offlineEfficiency: Double = 0.5
 
     // Karar olayları
-    // Aralık: bir kart kapandıktan ~18-30 sn sonra yenisi gelir (oyun-zamanı; hızla ölçeklenir).
-    // 1× hızda yaklaşık her 18-30 saniye, 2× hızda 9-15 saniye gibi tempolu.
-    static let decisionMinInterval: Double = 18
-    static let decisionMaxInterval: Double = 30
+    // Aralık: bir kart kapandıktan sonra yenisi gelir (oyun-zamanı; hızla ölçeklenir).
+    // NEFES ALANI: eskiden 18-30 idi → "durmadan popup, hiç oynamıyoruz" hissi yaratıyordu.
+    // 45-80'e çıkarıldı: 1× hızda ~45-80 sn, oyuncu kararlar ARASINDA ofis/ekip/büyüme ile
+    // gerçekten oynayabilir. Gerçek-zaman tabanı (en az 15 sn) ayrıca tick'te uygulanır.
+    static let decisionMinInterval: Double = 45
+    static let decisionMaxInterval: Double = 80
+    /// Yüksek hızda bile iki karar arası en az bu kadar GERÇEK saniye geçmeli (kart yağmuru engeli).
+    static let decisionMinRealSeconds: Double = 15
 
     // MARK: Departmanlar
     static let departments: [DepartmentDef] = [
@@ -498,7 +502,7 @@ enum Balance {
     static let maxActiveScenarios: Int = 3
     /// Yeni senaryo eklenme aralığı (oyun-ayı). Birden çok senaryonun üst üste binmesini
     /// önler; çeyrek başına ~2 senaryo akar.
-    static let scenarioSpawnIntervalMonths: Double = 1.4
+    static let scenarioSpawnIntervalMonths: Double = 2.4   // 1.4→2.4: senaryo akışını seyrelt (popup yoğunluğu)
     /// Yeni senaryonun deadline'a kadar olan süresi (oyun-ayı) — oyuncu hazırlanabilsin.
     static let scenarioLeadMonths: Double = 2.0
     /// Senaryo hedefinin evre tabanlı değerleme tabanı (mantıksız küçük olmasın).

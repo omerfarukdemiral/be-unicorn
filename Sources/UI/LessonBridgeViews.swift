@@ -64,10 +64,15 @@ struct ResultCardView: View {
                     .foregroundStyle(tint)
             }
 
-            Text(result.text)
-                .font(.bodyText)
-                .foregroundStyle(theme.text)
-                .fixedSize(horizontal: false, vertical: true)
+            // Uzun sonuç metni ekranı kaplamasın — sınırlı yükseklikte scrollable.
+            ScrollView {
+                Text(result.text)
+                    .font(.bodyText)
+                    .foregroundStyle(theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 180)
 
             // #19 köprü: sonucun altında ilgili Defter dersi.
             if let lesson = relatedLesson {
@@ -164,10 +169,15 @@ struct LessonPopupView: View {
                 }
             }
 
-            Text(lesson.body)
-                .font(.bodyText)
-                .foregroundStyle(theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // Uzun ders gövdesi — sınırlı yükseklikte scrollable (ekranı kaplamasın).
+            ScrollView {
+                Text(lesson.body)
+                    .font(.bodyText)
+                    .foregroundStyle(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 300)
 
             Button { dismiss() } label: {
                 Text("Anladım")
