@@ -1316,6 +1316,7 @@ final class GameModel: ObservableObject {
         let monthFraction = dt / Balance.secondsPerMonth
         advanceEconomy(monthFraction)
         maybeCelebrateUserMilestone()    // HZ-2: ilk 100/1000 kullanıcı eşik kutlaması (bir kez)
+        maybeDetectArchetype()           // C3: runtime arketibi gerçek duruma göre güncelle (yapışkan)
         advanceProjects(monthFraction)   // geliştirilen projeler ilerler, biten yayına girer
         updateMorale(dt)
         maybeQuit(dt)
@@ -1415,19 +1416,61 @@ final class GameModel: ObservableObject {
     var founderFullName: String { state.profile.founderFullName }
     /// Kurucu ünvanı evreyle yükselir (Hacker → Kurucu → CEO ...).
     var founderTitle: String { currentStage.title }
+
+    /// A1: oyuncunun beyan ettiği kurucu eğilimi (mekanik etki yok — salt felsefe/UI).
+    var founderLeaning: FounderLeaning { FounderLeaning(rawValue: state.founderLeaning) ?? .balanced }
+
+    // MARK: - C3 Runtime arketip tespiti
+    //
+    // Oyunun GERÇEK durumundan TÜRETİLİR (oyuncu seçmez). Niche eşiği C4 LTV/ARPU
+    // tavanından SONRA kalibre edilmiştir: satış-gücü kaynaklı ARPU katkısı tavanın
+    // (Balance.salesArpuCap) yarısını geçtiğinde + kullanıcı tabanı darsa = niş premium.
+    // Erken oyunda yeterli sinyal yoksa .unknown döner (suçlamasız: 'henüz şekilleniyor').
+    var currentArchetype: FounderArchetype {
+        // Yeterli sinyal yok → henüz şekilleniyor (erken oyun).
+        guard state.stageReached >= 2 || state.users >= 200 else { return .unknown }
+        // Satış gücünün ARPU'ya katkısı (C4 tavanına göre orantılı: 0..1).
+        let salesArpuShare = min(Balance.salesArpuCap, salesPower * Balance.salesArpuPerUnit) / Balance.salesArpuCap
+        // Öncelik sırası: ilk tutan dal (suçlamasız — hiçbiri 'doğru' değil).
+        if state.founderEquity >= 0.55 && state.adBudgetPerMonth <= 0 {
+            return .bootstrap                                    // hisseyi koru + reklamsız
+        }
+        if state.founderEquity < 0.45 && state.stageReached >= 3 {
+            return .vcRocket                                     // dilution → hız
+        }
+        if salesArpuShare >= 0.5 && state.users < 5_000 {
+            return .niche                                        // dar taban + güçlü fiyat
+        }
+        if state.users >= 20_000 {
+            return .platform                                     // geniş taban + ağ etkisi
+        }
+        return FounderArchetype(rawValue: state.detectedArchetype) ?? .unknown  // son kararlı arketibi koru
+    }
+
+    /// C3: tespit edilen arketibi state'e yazar (yapışkan). Tick'te çağrılır; ucuz.
+    /// .unknown'a geri düşürmez (bir kez şekillenince UI titreşmesin) — yalnızca
+    /// somut bir arketip tespit edildiğinde günceller.
+    private func maybeDetectArchetype() {
+        let detected = currentArchetype
+        if detected != .unknown, detected.rawValue != state.detectedArchetype {
+            state.detectedArchetype = detected.rawValue
+        }
+    }
     var sectorDef: CompanySectorDef { Balance.sector(state.profile.sector) ?? Balance.sectors[0] }
 
     /// Kuruluşu tamamla: profili kaydet + ilk projeyi (yayında) oluştur.
     /// İlk proje gün-1'den canlıdır (MVP yayında) — şirketin ilk ürünü.
     func completeCompanySetup(firstName: String, lastName: String,
                               company: String, sector: Int,
-                              firstProjectName: String, firstProjectCategory: Int) {
+                              firstProjectName: String, firstProjectCategory: Int,
+                              leaning: FounderLeaning = .balanced) {
         func clean(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
         state.profile.founderFirstName = clean(firstName)
         state.profile.founderLastName = clean(lastName)
         state.profile.companyName = clean(company)
         state.profile.sector = min(max(0, sector), Balance.sectors.count - 1)
         state.profile.setupComplete = true
+        state.founderLeaning = leaning.rawValue   // A1: kurucu eğilimini kaydet (mekanik etki yok)
 
         let catIndex = min(max(0, firstProjectCategory), Balance.projectCategories.count - 1)
         let projName = clean(firstProjectName).isEmpty ? clean(company) : clean(firstProjectName)

@@ -14,6 +14,7 @@ struct CompanySetupOverlay: View {
     @State private var sector = 0
     @State private var projectName = ""
     @State private var projectCategory = 0
+    @State private var leaning = FounderLeaning.balanced   // A1: adım 3 — kurucu eğilimi
     @FocusState private var focused: Field?
 
     private enum Field { case first, last, company, project }
@@ -23,6 +24,7 @@ struct CompanySetupOverlay: View {
         case 0: return !firstName.trimmed.isEmpty && !lastName.trimmed.isEmpty
         case 1: return !company.trimmed.isEmpty
         case 2: return !projectName.trimmed.isEmpty
+        case 3: return true                              // A2 KRİTİK: eğilim adımı her zaman ilerleyebilir
         default: return false
         }
     }
@@ -41,7 +43,8 @@ struct CompanySetupOverlay: View {
                         switch step {
                         case 0: founderStep
                         case 1: companyStep
-                        default: projectStep
+                        case 2: projectStep
+                        default: leaningStep
                         }
                     }
                     .padding(.horizontal, Space.s5)
@@ -66,7 +69,7 @@ struct CompanySetupOverlay: View {
     private var header: some View {
         VStack(spacing: Space.s3) {
             HStack(spacing: Space.s1) {
-                ForEach(0..<3, id: \.self) { i in
+                ForEach(0..<4, id: \.self) { i in
                     Capsule().fill(i == step ? theme.accent : theme.textQuaternary)
                         .frame(width: i == step ? 22 : 8, height: 8)
                         .animation(Motion.smooth, value: step)
@@ -93,21 +96,24 @@ struct CompanySetupOverlay: View {
         switch step {
         case 0: return "person.crop.circle.fill"
         case 1: return "building.2.fill"
-        default: return "shippingbox.fill"
+        case 2: return "shippingbox.fill"
+        default: return "sparkles"
         }
     }
     private var stepTitle: String {
         switch step {
         case 0: return "Kurucu Kim?"
         case 1: return "Şirketini Kur"
-        default: return "İlk Projen"
+        case 2: return "İlk Projen"
+        default: return "Senin Tarzın?"
         }
     }
     private var stepSubtitle: String {
         switch step {
         case 0: return "Bu maceranın CEO'su sensin. Kendini tanıt."
         case 1: return "Şirketinin adını ve faaliyet alanını seç."
-        default: return "Şirketinin ilk ürünü. Kuruluşta yayında başlar."
+        case 2: return "Şirketinin ilk ürünü. Kuruluşta yayında başlar."
+        default: return "Nasıl bir kurucu olacaksın? Doğru cevap yok — sadece senin yolun."
         }
     }
 
@@ -171,6 +177,30 @@ struct CompanySetupOverlay: View {
         }
     }
 
+    // MARK: Adım 3 — Kurucu eğilimi (A1/HZ-3; mekanik etki yok, salt felsefe)
+
+    private var leaningStep: some View {
+        VStack(alignment: .leading, spacing: Space.s4) {
+            ForEach(FounderLeaning.allCases, id: \.rawValue) { l in
+                pickCard(icon: l.icon, title: l.title, detail: l.blurb,
+                         tint: theme.accent, selected: leaning == l) {
+                    Haptics.selection(); withAnimation(Motion.snappy) { leaning = l }
+                }
+            }
+            // Seçime göre değişen felsefe damlası (suçlamasız koçluk).
+            HStack(alignment: .top, spacing: Space.s2) {
+                Image(systemName: "sparkles").foregroundStyle(theme.accent)
+                Text(leaning.philosophyDrop).font(.bodyText)
+                    .foregroundStyle(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(Space.s3).frame(maxWidth: .infinity, alignment: .leading)
+            .cellSurface(theme)
+            .id(leaning)
+            .transition(.opacity)
+        }
+    }
+
     // MARK: Footer — geri / devam / kur
 
     private var footer: some View {
@@ -188,12 +218,12 @@ struct CompanySetupOverlay: View {
             }
             Button {
                 Haptics.tap(); focused = nil
-                if step < 2 { withAnimation(Motion.snappy) { step += 1 } }
+                if step < 3 { withAnimation(Motion.snappy) { step += 1 } }
                 else { finish() }
             } label: {
                 HStack(spacing: Space.s2) {
-                    Text(step < 2 ? "Devam" : "Şirketi Kur")
-                    Image(systemName: step < 2 ? "arrow.right" : "checkmark.circle.fill")
+                    Text(step < 3 ? "Devam" : "Şirketi Kur")
+                    Image(systemName: step < 3 ? "arrow.right" : "checkmark.circle.fill")
                 }
                 .font(.bodyL)
                 .modifier(AppButton.primary(theme, enabled: canAdvance))
@@ -208,7 +238,8 @@ struct CompanySetupOverlay: View {
     private func finish() {
         model.completeCompanySetup(firstName: firstName, lastName: lastName,
                                    company: company, sector: sector,
-                                   firstProjectName: projectName, firstProjectCategory: projectCategory)
+                                   firstProjectName: projectName, firstProjectCategory: projectCategory,
+                                   leaning: leaning)
     }
 
     // MARK: Yardımcı bileşenler

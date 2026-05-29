@@ -126,6 +126,8 @@ struct GameState: Codable {
     var lastSaved: Date = Date()
     var hasSeenOnboarding: Bool = false
     var currency: Currency = .usd       // görüntü para birimi (TL/Euro/Dolar)
+    var founderLeaning: Int = FounderLeaning.balanced.rawValue      // A1: kuruluşta beyan edilen eğilim (mekanik etki yok)
+    var detectedArchetype: String = FounderArchetype.unknown.rawValue  // C3: runtime tespit edilen arketip
 
     init() {
         headcount = Array(repeating: 0, count: Balance.departmentCount)
@@ -216,6 +218,8 @@ struct GameState: Codable {
         lastSaved = g(.lastSaved, Date())
         hasSeenOnboarding = g(.hasSeenOnboarding, false)
         currency = g(.currency, Currency.usd)
+        founderLeaning = g(.founderLeaning, FounderLeaning.balanced.rawValue)
+        detectedArchetype = g(.detectedArchetype, FounderArchetype.unknown.rawValue)
     }
 
     mutating func normalize() {
