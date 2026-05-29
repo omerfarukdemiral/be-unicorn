@@ -5,20 +5,22 @@ import SwiftUI
 enum Palette {
 
     // MARK: Semantik (sabit — tek kaynak)
+    // Premium/sakin yön: tonlar ~%20 soldurulmuş (eskiden fazla canlı/parlaktı ve
+    // yeşil accent'le yarışıyordu). Anlamlar korunur, doygunluk düşer.
     /// Pozitif delta, sağlıklı oran, karlı runway, tamamlanan evre.
-    static let success    = Color(hex: "3FCF8E")
+    static let success    = Color(hex: "5AB389")
     /// success'in koyu/dolgu varyantı.
-    static let successDim = Color(hex: "2BA876")
+    static let successDim = Color(hex: "3E8E68")
     /// Kırılgan, dikkat, orta moral.
-    static let warning    = Color(hex: "F5C451")
+    static let warning    = Color(hex: "D9B25E")
     /// Negatif nakit, düşük runway, iflas, çıkar butonu.
-    static let danger     = Color(hex: "F0584F")
+    static let danger     = Color(hex: "D2645B")
     /// danger basılı/dolgu varyantı.
-    static let dangerDim  = Color(hex: "C2443C")
+    static let dangerDim  = Color(hex: "A84A42")
     /// Kutlama, XP, prestij vurgusu (funding/win).
-    static let gold       = Color(hex: "FFD479")
+    static let gold       = Color(hex: "E3C281")
     /// Unicorn / zafer pembesi.
-    static let unicorn    = Color(hex: "FF6FB5")
+    static let unicorn    = Color(hex: "C67BA4")
 
     // MARK: Metin opaklık kademeleri (beyaz üstüne)
     static let textPrimary    = Color.white                  // kahraman sayılar, başlıklar
