@@ -40,37 +40,43 @@ struct CycleReviewView: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.6).ignoresSafeArea()
-            // İçerik uzun (scorecard + kohort sıralaması + rozetler) → taşmayı önlemek
-            // için ScrollView; kart ekrana sığmazsa kaydırılır.
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: Space.s4) {
-                    hero
-                    Text("Çeyrek \(review.quarter) Kapandı")
-                        .font(.titleL)
-                        .foregroundStyle(theme.accent)
-                    Text(headline)
-                        .font(.appText(14, .medium))
-                        .foregroundStyle(theme.text).multilineTextAlignment(.center)
+            // İçerik uzun (scorecard + kohort + rozetler). Gövde KAYDIRILABİLİR, aksiyon
+            // butonu kartın altında SABİT → her zaman görünür (ekrandan taşmaz, tab bar
+            // arkasında kalmaz). Kart güvenli alanı doldurur.
+            VStack(spacing: 0) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: Space.s4) {
+                        hero
+                        Text("Çeyrek \(review.quarter) Kapandı")
+                            .font(.titleL)
+                            .foregroundStyle(theme.accent)
+                        Text(headline)
+                            .font(.appText(14, .medium))
+                            .foregroundStyle(theme.text).multilineTextAlignment(.center)
 
-                    scorecard
-                    cohortStandings
-                    leagueMovement
-                    coachingNote
-
-                    Button { Haptics.tap(); model.startNextQuarter() } label: {
-                        Text("Yeni Çeyrek").font(.bodyL)
-                            .modifier(AppButton.primary(theme))
+                        scorecard
+                        cohortStandings
+                        leagueMovement
+                        coachingNote
                     }
-                    .buttonStyle(.pressable)
+                    .padding(Space.s5)
                 }
-                .padding(Space.s5)
-                .frame(maxWidth: 360)
-                .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
-                .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
+                // Sabit alt aksiyon — kaydırmadan bağımsız, hep erişilebilir.
+                Button { Haptics.tap(); model.startNextQuarter() } label: {
+                    Text("Yeni Çeyrek").font(.bodyL)
+                        .modifier(AppButton.primary(theme))
+                }
+                .buttonStyle(.pressable)
                 .padding(.horizontal, Space.s5)
-                .padding(.vertical, Space.s5)
-                .scaleEffect(appeared ? 1 : 0.8).opacity(appeared ? 1 : 0)
+                .padding(.top, Space.s3).padding(.bottom, Space.s4)
             }
+            .frame(maxWidth: 380)
+            .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
+            .overlay(RoundedRectangle(cornerRadius: Radius.overlay).stroke(theme.hairline, lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
+            .padding(.horizontal, Space.s4)
+            .padding(.vertical, Space.s4)
+            .scaleEffect(appeared ? 1 : 0.8).opacity(appeared ? 1 : 0)
         }
         .onAppear {
             // Terfide kutlama haptiği; aksi halde yumuşak dokunuş.

@@ -1352,6 +1352,24 @@ final class GameModel: ObservableObject {
         save()
     }
 
+    /// Ayarlardan "Baştan Başla": tüm ilerlemeyi sıfırla ve şirket+proje KURULUŞ ekranına dön.
+    /// Onboarding tanıtımı atlanır (hasSeenOnboarding korunur); setupComplete=false →
+    /// CompanySetupOverlay açılır (kullanıcı yeni şirket adı + proje + eğilim girer).
+    func resetToSetup() {
+        var fresh = GameState()
+        fresh.hasSeenOnboarding = true
+        fresh.profile.setupComplete = false   // → CompanySetupOverlay
+        state = fresh
+        debtMonths = 0
+        // Tüm bekleyen overlay'leri temizle (eski oyundan sarkmasın).
+        pendingBankruptcy = false; pendingWin = false; pendingEvent = nil; pendingResult = nil
+        pendingFundingStage = nil; pendingCycleReview = nil; pendingSeasonFinale = nil
+        pendingScenarioResult = nil; pendingDailyClose = nil; pendingSeriesAGate = false
+        inspectedMechanic = nil; inspectedDept = nil; pendingOfflineReport = nil; pendingToast = nil
+        scheduleNextDecision()
+        save()
+    }
+
     // MARK: - Döngü
 
     func start() {

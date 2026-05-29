@@ -46,6 +46,7 @@ struct ContentView: View {
     @State private var soundEnabled = AudioManager.shared.isEnabled
     @State private var introAppeared = false
     @State private var lessonsOpen = false
+    @State private var settingsOpen = false
     @Environment(\.scenePhase) private var scenePhase
 
     /// Ekranın üstünde yüzen kısa mesaj.
@@ -68,7 +69,7 @@ struct ContentView: View {
 
             // Ana içerik: HUD + sekme paneli.
             VStack(spacing: 0) {
-                HUDView(model: model, theme: theme, soundEnabled: $soundEnabled)
+                HUDView(model: model, theme: theme, soundEnabled: $soundEnabled, settingsOpen: $settingsOpen)
                     .padding(.horizontal, Space.s3)
                     .padding(.top, Space.s2)
                     .padding(.bottom, Space.s2)
@@ -137,8 +138,6 @@ struct ContentView: View {
                 .allowsHitTesting(false)
 
             timeStateOverlay
-
-            overlays
         }
         // Alt sticky chunky tab bar — vertical mobil oyun standart düzeni.
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -148,9 +147,17 @@ struct ContentView: View {
                 .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.18),
                            value: introAppeared)
         }
+        // Modal popup'lar tab bar'ın DA ÜSTÜNde, TAM EKRAN — yoksa uzun kartlar tab bar
+        // arkasında kalıp aksiyon butonu erişilemiyordu. overlay tüm frame'i (inset dahil) kaplar.
+        .overlay { overlays }
         .sheet(isPresented: $lessonsOpen) {
             LessonsPanel(theme: theme, onClose: { lessonsOpen = false })
                 .presentationBackground(.clear)
+        }
+        .sheet(isPresented: $settingsOpen) {
+            SettingsView(model: model, theme: theme, soundEnabled: $soundEnabled,
+                         onClose: { settingsOpen = false })
+                .presentationDetents([.large])
         }
         // D3 — Dynamic Type tavanı: aşırı erişilebilirlik boyutlarında oyun HUD/kart
         // düzeni kırılmasın diye accessibility1 ile sınırla (default boyutta etkisiz).

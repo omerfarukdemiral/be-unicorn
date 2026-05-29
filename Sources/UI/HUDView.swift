@@ -12,6 +12,7 @@ struct HUDView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
     @Binding var soundEnabled: Bool
+    @Binding var settingsOpen: Bool
 
     @State private var pulse = false
     @State private var cashPop: CGFloat = 1
@@ -271,19 +272,18 @@ struct HUDView: View {
 
     private var gearButton: some View {
         Button {
-            soundEnabled = AudioManager.shared.toggle()
-            Haptics.selection()
+            Haptics.tap(); settingsOpen = true
         } label: {
-            Image(systemName: soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+            Image(systemName: "gearshape.fill")
                 .font(.system(size: 10.5, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(soundEnabled ? Palette.textSecondary : Palette.textTertiary)
+                .foregroundStyle(Palette.textSecondary)
                 .frame(width: 24, height: 24)
                 .background(theme.surfaceHigh, in: Circle())
                 .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel(soundEnabled ? "Sesi kapat" : "Sesi aç")
+        .accessibilityLabel("Ayarlar")
     }
 
     // MARK: - ALT: iki ince progress bar (moral · sıradaki tur)
