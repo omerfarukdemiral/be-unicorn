@@ -26,6 +26,7 @@ enum GameTab: CaseIterable {
 
 struct ContentView: View {
     @StateObject private var model: GameModel
+    @StateObject private var store = StoreManager()   // B6 — IAP entitlement (Apple'da)
     @State private var tab: GameTab = {
         // İlk tab — opsiyonel launch argümanıyla override edilebilir (test/QA).
         let args = ProcessInfo.processInfo.arguments
@@ -174,6 +175,10 @@ struct ContentView: View {
                 // QA: --demo-win → Win ekranını (+ Kurucu Karnesi) açılışta göster.
                 if args.contains("--demo-win") {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.pendingWin = true }
+                }
+                // QA: --demo-paywall → Series A yumuşak duvarını (PaywallView) açılışta göster.
+                if args.contains("--demo-paywall") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.pendingSeriesAGate = true }
                 }
                 // Not: --force-decision GameModel.init içinde de işlenir (model katmanına da).
             }
@@ -361,6 +366,15 @@ struct ContentView: View {
             BankruptcyView(model: model, theme: theme)
         } else if model.pendingWin {
             WinView(model: model, theme: theme)
+        } else if model.pendingSeriesAGate {
+            // B6 — Series A yumuşak duvarı: Tam Sürüm varsa görünmez onayla, yoksa paywall.
+            if store.isFullVersion {
+                Color.clear.onAppear { model.confirmSeriesARaise() }
+            } else {
+                PaywallView(store: store, theme: theme,
+                            onUnlocked: { model.confirmSeriesARaise() },
+                            onDismiss: { model.dismissSeriesAGate() })
+            }
         } else if let s = model.pendingFundingStage {
             FundingRoundView(model: model, theme: theme, stageIndex: s)
         } else if let finale = model.pendingSeasonFinale {

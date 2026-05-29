@@ -9,6 +9,10 @@ final class GameModel: ObservableObject {
     // Geçici UI sinyalleri
     @Published var pendingEvent: DecisionCard? = nil
     @Published var pendingFundingStage: Int? = nil   // tur kutlaması
+    /// B6 — Series A yumuşak duvarı sinyali. raiseRound() Series A (stage id 3) turunu
+    /// toplamadan ÖNCE bunu true yapar; ContentView entitlement'a göre PaywallView gösterir
+    /// ya da confirmSeriesARaise() çağırır. GameModel StoreKit'ten bağımsız kalır.
+    @Published var pendingSeriesAGate: Bool = false
     @Published var pendingWin: Bool = false
     @Published var pendingBankruptcy: Bool = false
     @Published var pendingOfflineReport: OfflineReport? = nil
@@ -578,6 +582,25 @@ final class GameModel: ObservableObject {
     @discardableResult
     func raiseRound() -> Bool {
         guard canRaise, let next = nextStage else { return false }
+        // B6 — Series A (stage id 3) yumuşak duvarı: Seed turuna kadar serbest;
+        // Series A toplama Tam Sürüm gerektirir. Mutasyon ContentView onayına ertelenir.
+        if next.id == 3 && !pendingSeriesAGate {
+            pendingSeriesAGate = true
+            return false
+        }
+        performRaise(next)
+        return true
+    }
+
+    /// B6 — Series A gate onaylandıktan (entitlement var) sonra ContentView çağırır.
+    func confirmSeriesARaise() {
+        pendingSeriesAGate = false
+        guard canRaise, let next = nextStage, next.id == 3 else { return }
+        performRaise(next)
+    }
+
+    /// Asıl tur-toplama mutasyonu (gate'ten bağımsız ortak gövde).
+    private func performRaise(_ next: StageDef) {
         state.cash += next.raiseAmount
         emitCashDelta(next.raiseAmount)
         state.founderEquity *= (1 - next.equityGiven)
@@ -592,10 +615,11 @@ final class GameModel: ObservableObject {
             pendingFundingStage = state.stage
         }
         Feedback.celebrate()   // tur toplama / win kutlaması
-        return true
     }
 
     func dismissFunding() { pendingFundingStage = nil }
+    /// Paywall'da 'Şimdilik Seed'de devam' — duvarı kapat, hiçbir mutasyon yapma.
+    func dismissSeriesAGate() { pendingSeriesAGate = false }
     func dismissWin() { pendingWin = false }
 
     // MARK: - Startup Ligleri + Çeyrek değerlendirmesi (completed-cycle)

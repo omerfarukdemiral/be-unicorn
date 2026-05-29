@@ -1,0 +1,40 @@
+{
+  "identifier" : "F1A2B3C4-0001-4D5E-8F90-UNICORNFULLV1",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "F1A2B3C4-0002-4D5E-8F90-UNICORNFULLV2",
+      "localizations" : [
+        {
+          "description" : "Series A'dan Unicorn'a uzanan yolculuğun tamamını aç: tüm funding turları, geç-oyun karar kartları ve büyüyen Defter dersleri. Tek seferlik ödeme, abonelik yok, reklamsız.",
+          "displayName" : "Unicorn Tam Sürüm",
+          "locale" : "tr"
+        },
+        {
+          "description" : "Unlock the full journey from Series A to Unicorn: every funding round, late-game decision cards, and the growing Notebook of lessons. One-time purchase, no subscription, ad-free.",
+          "displayName" : "Unicorn Full Version",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "co.omerfarukdemiral.unicorn.fullversion",
+      "referenceName" : "Unicorn Full Version",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0000000000",
+    "_developerTeamID" : "9ND443UGHV",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "tr_TR",
+    "_storefront" : "TUR",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
