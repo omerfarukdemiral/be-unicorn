@@ -69,7 +69,8 @@ struct ContentView: View {
 
             // Ana içerik: HUD + sekme paneli.
             VStack(spacing: 0) {
-                HUDView(model: model, theme: theme, soundEnabled: $soundEnabled, settingsOpen: $settingsOpen)
+                HUDView(model: model, theme: theme, soundEnabled: $soundEnabled,
+                        settingsOpen: $settingsOpen, lessonsOpen: $lessonsOpen)
                     .padding(.horizontal, Space.s3)
                     .padding(.top, Space.s2)
                     .padding(.bottom, Space.s2)
@@ -106,29 +107,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            // Defter — top-right floating chip (tek ikon, sleek hairline).
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { Haptics.selection(); lessonsOpen = true } label: {
-                        Image(systemName: "book.closed.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(theme.accent)
-                            .frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial, in: Circle())
-                            .overlay(Circle().stroke(theme.hairline))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Defter")
-                }
-                Spacer()
-            }
-            .padding(.trailing, Space.s3)
-            .padding(.top, 52)   // safe-area + HUD'un üstünde sade köşe yerleşimi
-            .opacity(introAppeared ? 1 : 0)
-            .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.18),
-                       value: introAppeared)
+            // (Defter artık HUD'da sabit buton — yüzen chip kaldırıldı, örtüşme yok.)
 
             // HUD nakit yakınında yüzen ±tutar çipi.
             CashDeltaOverlay(model: model)

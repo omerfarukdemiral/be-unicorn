@@ -13,6 +13,7 @@ struct HUDView: View {
     var theme: Theme
     @Binding var soundEnabled: Bool
     @Binding var settingsOpen: Bool
+    @Binding var lessonsOpen: Bool
 
     @State private var pulse = false
     @State private var cashPop: CGFloat = 1
@@ -207,11 +208,28 @@ struct HUDView: View {
     private var rightGroup: some View {
         VStack(alignment: .trailing, spacing: Space.s1 + 2) {
             timeControlPill
+            // Sabit kontrol satırı: takvim (günler) · Defter · ayarlar — yüzen ikon YOK.
             HStack(spacing: 5) {
                 calendarChip
+                bookButton
                 gearButton
             }
         }
+    }
+
+    /// Defter (dersler) — takvim ile ayar arasında SABİT buton (eskiden yüzen chip'ti).
+    private var bookButton: some View {
+        Button { Haptics.selection(); lessonsOpen = true } label: {
+            Image(systemName: "book.closed.fill")
+                .font(.system(size: 10.5, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(theme.accent)
+                .frame(width: 24, height: 24)
+                .background(theme.surfaceHigh, in: Circle())
+                .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("Defter")
     }
 
     private var timeControlPill: some View {
