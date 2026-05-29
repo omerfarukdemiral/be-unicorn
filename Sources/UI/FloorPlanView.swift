@@ -83,11 +83,14 @@ struct FloorPlanView: View {
                         emptyHint
                             .frame(width: geo.size.width, height: geo.size.height)
                     } else {
+                        // Ekibi masalara dağıt → masalarda canlı avatar rozetleri (artık boş değil).
+                        let seated = assignMembersToSeats(cells: cells, members: model.state.members)
                         // Akış/grid packing: katalog sırasına göre soldan-sağa, satır satır.
                         ForEach(Array(cells.enumerated()), id: \.offset) { idx, cell in
                             let row = idx / cols
                             let col = idx % cols
-                            ItemTile(cell: cell, theme: theme, size: cellSize)
+                            ItemTile(cell: cell, theme: theme, size: cellSize,
+                                     occupants: seated[idx] ?? [])
                                 .frame(width: cellSize, height: cellSize)
                                 .offset(x: CGFloat(col) * (cellSize + spacing),
                                         y: CGFloat(row) * (cellSize + spacing) + 6)
@@ -179,17 +182,19 @@ private struct ItemTile: View {
     var occupants: [TeamMember] = []
 
     private var color: Color { Color(hex: cell.def.category.colorHex) }
+    /// Bu masada biri oturuyor mu — dolu masa "canlı" (parlak), boş masa sönük görünür.
+    private var occupied: Bool { !occupants.isEmpty }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             VStack(spacing: 3) {
                 Image(systemName: cell.def.icon)
                     .font(.system(size: size * 0.34, weight: .semibold))
-                    .foregroundStyle(color)
+                    .foregroundStyle(occupied ? color : color.opacity(0.55))
                     .frame(height: size * 0.42)
                 Text(cell.def.name)
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(theme.textSecondary)
+                    .foregroundStyle(occupied ? theme.textSecondary : theme.subtle)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.7)
@@ -197,12 +202,23 @@ private struct ItemTile: View {
             .padding(4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if !occupants.isEmpty {
+            if occupied {
                 occupantBadges.padding(3)
             }
         }
-        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.s))
-        .overlay(RoundedRectangle(cornerRadius: Radius.s).stroke(color.opacity(0.4), lineWidth: 1))
+        // Derinlik: yumuşak dikey gradient + dolu masada daha belirgin renk/kenarlık + hafif gölge.
+        .background(
+            RoundedRectangle(cornerRadius: Radius.s)
+                .fill(LinearGradient(
+                    colors: [color.opacity(occupied ? 0.22 : 0.10),
+                             color.opacity(occupied ? 0.10 : 0.04)],
+                    startPoint: .top, endPoint: .bottom))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.s)
+                .stroke(color.opacity(occupied ? 0.6 : 0.28), lineWidth: occupied ? 1.2 : 1)
+        )
+        .shadow(color: .black.opacity(occupied ? 0.22 : 0.10), radius: occupied ? 4 : 2, y: 1)
     }
 
     /// Avatar yığını: en fazla 2 görünür başharf rozeti, fazlası "+N".
