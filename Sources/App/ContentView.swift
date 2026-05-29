@@ -151,6 +151,9 @@ struct ContentView: View {
             LessonsPanel(theme: theme, onClose: { lessonsOpen = false })
                 .presentationBackground(.clear)
         }
+        // D3 — Dynamic Type tavanı: aşırı erişilebilirlik boyutlarında oyun HUD/kart
+        // düzeni kırılmasın diye accessibility1 ile sınırla (default boyutta etkisiz).
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .onAppear {
             let args = ProcessInfo.processInfo.arguments
             if !introAppeared {
