@@ -17,22 +17,27 @@ struct SeasonFinaleView: View {
         ZStack {
             // Görkemli zemin — Win ekranı dilinde koyu unicorn tonu.
             Color(hex: "12101F").opacity(0.92).ignoresSafeArea()
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: Space.s4) {
-                    hero
-                    Text("Sezon \(finale.season) Tamamlandı!")
-                        .font(.titleL)
-                        .foregroundStyle(Palette.gold)
-                    Text("Görkemli bir sezon kapandı. Kalıcı bir ünvan ve avantaj kazandın — sonraki sezonlara taşınır.")
-                        .font(.appText(14, .medium))
-                        .foregroundStyle(theme.text)
-                        .multilineTextAlignment(.center)
+            // Gövde KAYDIRILABİLİR, butonlar altta SABİT → ekrandan taşmaz, hep erişilebilir.
+            VStack(spacing: 0) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: Space.s4) {
+                        hero
+                        Text("Sezon \(finale.season) Tamamlandı!")
+                            .font(.titleL)
+                            .foregroundStyle(Palette.gold)
+                        Text("Görkemli bir sezon kapandı. Kalıcı bir ünvan ve avantaj kazandın — sonraki sezonlara taşınır.")
+                            .font(.appText(14, .medium))
+                            .foregroundStyle(theme.text)
+                            .multilineTextAlignment(.center)
 
-                    titleCard
-                    summaryCard
-                    rewardCard
-
-                    // B2: Kurucu Karnesi — sezon içgörü teslimatı.
+                        titleCard
+                        summaryCard
+                        rewardCard
+                    }
+                    .padding(Space.s5)
+                }
+                // Sabit alt aksiyonlar.
+                VStack(spacing: Space.s2) {
                     Button { Haptics.selection(); showScorecard = true } label: {
                         HStack(spacing: Space.s2) {
                             Image(systemName: "doc.text.magnifyingglass")
@@ -49,16 +54,17 @@ struct SeasonFinaleView: View {
                     }
                     .buttonStyle(.pressable)
                 }
-                .padding(Space.s5)
-                .frame(maxWidth: 360)
-                .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
-                .overlay(RoundedRectangle(cornerRadius: Radius.overlay)
-                    .stroke(theme.hairline, lineWidth: 1))
-                .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
                 .padding(.horizontal, Space.s5)
-                .padding(.vertical, Space.s5)
-                .scaleEffect(appeared ? 1 : 0.8).opacity(appeared ? 1 : 0)
+                .padding(.top, Space.s3).padding(.bottom, Space.s4)
             }
+            .frame(maxWidth: 380)
+            .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
+            .overlay(RoundedRectangle(cornerRadius: Radius.overlay)
+                .stroke(theme.hairline, lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
+            .padding(.horizontal, Space.s4)
+            .padding(.vertical, Space.s4)
+            .scaleEffect(appeared ? 1 : 0.8).opacity(appeared ? 1 : 0)
         }
         .onAppear {
             Haptics.success()

@@ -24,28 +24,32 @@ struct PostMortemView: View {
                            center: .top, startRadius: 20, endRadius: 420)
                 .ignoresSafeArea()
 
-            // İçerik scrollable — küçük ekranda taşmasın.
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: Space.s4) {
-                    header
-                    miniCharts
-                    diagnosticsSection
-                    strategySection
-                    statsFooter
-                    restartButton
+            // Gövde KAYDIRILABİLİR, "Yeni Deneme" altta SABİT → iflasta kritik buton hep erişilebilir.
+            VStack(spacing: 0) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: Space.s4) {
+                        header
+                        miniCharts
+                        diagnosticsSection
+                        strategySection
+                        statsFooter
+                    }
+                    .padding(Space.s5)
                 }
-                .padding(Space.s5)
-                .frame(maxWidth: 380)
-                .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.overlay)
-                        .stroke(penColor.opacity(0.18), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.4), radius: 22, y: 10)
-                .padding(.horizontal, Space.s5)
-                .padding(.vertical, Space.s5)
-                .scaleEffect(appeared ? 1 : 0.88).opacity(appeared ? 1 : 0)
+                restartButton
+                    .padding(.horizontal, Space.s5)
+                    .padding(.top, Space.s3).padding(.bottom, Space.s4)
             }
+            .frame(maxWidth: 380)
+            .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.overlay)
+                    .stroke(penColor.opacity(0.18), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.4), radius: 22, y: 10)
+            .padding(.horizontal, Space.s4)
+            .padding(.vertical, Space.s4)
+            .scaleEffect(appeared ? 1 : 0.88).opacity(appeared ? 1 : 0)
         }
         .onAppear {
             withAnimation(Motion.snappy) { appeared = true }

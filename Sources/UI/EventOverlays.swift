@@ -144,68 +144,70 @@ struct WinView: View {
                 .ignoresSafeArea()
             if appeared { ConfettiBurst().ignoresSafeArea() }
 
-            VStack(spacing: Space.s4) {
-                // Zafer ikonu — stilize unicorn + tek sade hero ışıltı (kontrollü kutlama).
-                ZStack {
-                    if appeared {
-                        CelebrationRing(color: Palette.unicorn)
+            // Kutlama içeriği KAYDIRILABİLİR, butonlar altta SABİT (küçük ekran/Dynamic
+            // Type'ta taşmaz, "Devam" hep erişilebilir).
+            VStack(spacing: 0) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: Space.s4) {
+                        ZStack {
+                            if appeared { CelebrationRing(color: Palette.unicorn) }
+                            UnicornHero(accent: Palette.unicorn, size: 140)
+                                .scaleEffect(appeared ? 1 : 0.5)
+                        }
+                        .frame(height: 140)
+
+                        Text("UNICORN!")
+                            .font(.displayXL)
+                            .foregroundStyle(Palette.unicorn)
+
+                        Text("$1 MİLYAR DEĞERLEME")
+                            .font(.eyebrow)
+                            .tracking(1.5)
+                            .foregroundStyle(Palette.gold)
+                            .padding(.horizontal, Space.s3).padding(.vertical, Space.s1)
+                            .background(Palette.gold.opacity(0.14), in: Capsule())
+                            .overlay(Capsule().stroke(Palette.gold.opacity(0.4), lineWidth: 1))
+
+                        Text("Garajdan zirveye çıktın, kurucu.\nBu bir efsanenin başlangıcı.")
+                            .font(.bodyL)
+                            .foregroundStyle(theme.text).multilineTextAlignment(.center)
+
+                        VStack(spacing: Space.s2) {
+                            summaryLine("Hisse oranın", "%\(Int(model.founderEquity * 100))",
+                                        icon: "chart.pie.fill", tint: Palette.gold)
+                            summaryLine(league.name, "Lig", icon: league.icon,
+                                        tint: Color(hex: league.colorHex))
+                            summaryLine(seasonTitle.name, "Sezon \(model.seasonNumber) · \(model.quarterNumber). Çeyrek",
+                                        icon: seasonTitle.icon, tint: Color(hex: seasonTitle.colorHex))
+                        }
+                        .padding(Space.s4)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.m))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.m)
+                            .stroke(Palette.unicorn.opacity(0.25), lineWidth: 1))
                     }
-                    UnicornHero(accent: Palette.unicorn, size: 140)
-                        .scaleEffect(appeared ? 1 : 0.5)
+                    .padding(.horizontal, Space.s6).padding(.top, Space.s6).padding(.bottom, Space.s3)
                 }
-                .frame(height: 140)
-
-                Text("UNICORN!")
-                    .font(.displayXL)
-                    .foregroundStyle(Palette.unicorn)
-
-                // "$1 MİLYAR" vurgusu — gold rozet.
-                Text("$1 MİLYAR DEĞERLEME")
-                    .font(.eyebrow)
-                    .tracking(1.5)
-                    .foregroundStyle(Palette.gold)
-                    .padding(.horizontal, Space.s3).padding(.vertical, Space.s1)
-                    .background(Palette.gold.opacity(0.14), in: Capsule())
-                    .overlay(Capsule().stroke(Palette.gold.opacity(0.4), lineWidth: 1))
-
-                Text("Garajdan zirveye çıktın, kurucu.\nBu bir efsanenin başlangıcı.")
-                    .font(.bodyL)
-                    .foregroundStyle(theme.text).multilineTextAlignment(.center)
-
-                // Başarı özeti — hisse + lig + sezon ünvanı.
+                // Sabit alt aksiyonlar.
                 VStack(spacing: Space.s2) {
-                    summaryLine("Hisse oranın", "%\(Int(model.founderEquity * 100))",
-                                icon: "chart.pie.fill", tint: Palette.gold)
-                    summaryLine(league.name, "Lig", icon: league.icon,
-                                tint: Color(hex: league.colorHex))
-                    summaryLine(seasonTitle.name, "Sezon \(model.seasonNumber) · \(model.quarterNumber). Çeyrek",
-                                icon: seasonTitle.icon, tint: Color(hex: seasonTitle.colorHex))
-                }
-                .padding(Space.s4)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.m))
-                .overlay(RoundedRectangle(cornerRadius: Radius.m)
-                    .stroke(Palette.unicorn.opacity(0.25), lineWidth: 1))
-
-                // B2: Kurucu Karnesi — nihai içgörü teslimatı (değer kanıtı).
-                Button { Haptics.selection(); showScorecard = true } label: {
-                    HStack(spacing: Space.s2) {
-                        Image(systemName: "doc.text.magnifyingglass")
-                        Text("Kurucu Karnesini Gör").font(.bodyL)
+                    Button { Haptics.selection(); showScorecard = true } label: {
+                        HStack(spacing: Space.s2) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                            Text("Kurucu Karnesini Gör").font(.bodyL)
+                        }
+                        .modifier(AppButton.secondary(theme))
                     }
-                    .modifier(AppButton.secondary(theme))
-                }
-                .buttonStyle(.pressable)
-                .padding(.top, Space.s1)
+                    .buttonStyle(.pressable)
 
-                Button { Haptics.tap(); model.dismissWin() } label: {
-                    Text("İmparatorluğu Yönetmeye Devam").font(.bodyL)
-                        .modifier(ButtonChrome(bg: Palette.unicorn, fg: .white,
-                                               glow: Palette.unicorn, height: AppButton.height))
+                    Button { Haptics.tap(); model.dismissWin() } label: {
+                        Text("İmparatorluğu Yönetmeye Devam").font(.bodyL)
+                            .modifier(ButtonChrome(bg: Palette.unicorn, fg: .white,
+                                                   glow: Palette.unicorn, height: AppButton.height))
+                    }
+                    .buttonStyle(.pressable)
                 }
-                .buttonStyle(.pressable)
+                .padding(.horizontal, Space.s5).padding(.bottom, Space.s5).padding(.top, Space.s2)
             }
-            .padding(Space.s6).frame(maxWidth: 350)
-            .padding(.horizontal, Space.s5)
+            .frame(maxWidth: 360)
             .scaleEffect(appeared ? 1 : 0.85).opacity(appeared ? 1 : 0)
         }
         .onAppear {
