@@ -63,13 +63,22 @@ private struct DeptRow: View {
         PanelCard(theme: theme) {
             VStack(spacing: Space.s3) {
                 HStack(spacing: Space.s3) {
-                    ZStack {
-                        Circle().fill(deptColor.opacity(0.25)).frame(width: 42, height: 42)
-                        // Departman ikonu: id bazlı SF Symbol eşlemesi
-                        Image(systemName: Icons.Dept.symbol(for: dept.id))
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(deptColor)
+                    Button {
+                        Haptics.tap(); model.inspectedDept = dept.id   // #21: EmployeeCardView canlandırıldı
+                    } label: {
+                        ZStack {
+                            Circle().fill(deptColor.opacity(0.25)).frame(width: 42, height: 42)
+                            // Departman ikonu: id bazlı SF Symbol eşlemesi
+                            Image(systemName: Icons.Dept.symbol(for: dept.id))
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(deptColor)
+                            // Detay ipucu — avatara tıklanabilirliği belli et.
+                            Circle().stroke(deptColor.opacity(0.45), lineWidth: 1)
+                                .frame(width: 42, height: 42)
+                        }
                     }
+                    .buttonStyle(.pressable)
+                    .accessibilityLabel("\(dept.name) detayını aç")
                     VStack(alignment: .leading, spacing: 3) {
                         Text(dept.name).font(.appText(15, .bold))
                             .foregroundStyle(theme.text)

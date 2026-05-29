@@ -163,7 +163,10 @@ final class GameModel: ObservableObject {
     var totalHeadcount: Int { state.headcount.reduce(0, +) }
     var hasSeenOnboarding: Bool { state.hasSeenOnboarding }
 
-    func count(_ i: Int) -> Int { state.headcount[i] }
+    func count(_ i: Int) -> Int {
+        guard i >= 0 && i < state.headcount.count else { return 0 }   // #21: latent crash guard
+        return state.headcount[i]
+    }
 
     // MARK: - Ekip üyeleri (kimlik katmanı)
 
