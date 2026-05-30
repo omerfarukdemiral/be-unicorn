@@ -282,31 +282,53 @@ enum Balance {
     static var departmentCount: Int { departments.count }
 
     // MARK: Modüller
+    // Modüller (Track B): id == indeks (GameModel modules[i] ile erişir — SIRA KORUNUR).
+    // İlk 8'in id+effect'i save-uyumu için korunur; detay zenginleşti + evre-gating kademeli.
+    // id 8-13: geç-evre derinleşme (mevcut effect türleri, yeni tür yok).
     static let modules: [ModuleDef] = [
         .init(id: 0, name: "CI/CD Hattı", icon: "🔁",
-              detail: "Mühendislik verimi artar.", baseCost: 8_000, costGrowth: 4.0, maxLevel: 5,
-              effect: .globalOutput(0.10), unlockStage: 0),
+              detail: "Her commit otomatik test edilir, dağıtım dakikalar sürer. Mühendislik verimi kalıcı artar.",
+              baseCost: 8_000, costGrowth: 4.0, maxLevel: 5, effect: .globalOutput(0.10), unlockStage: 0),
         .init(id: 1, name: "Growth Hack", icon: "🚀",
-              detail: "Kullanıcı büyümesi hızlanır.", baseCost: 12_000, costGrowth: 4.5, maxLevel: 5,
-              effect: .growthMult(0.15), unlockStage: 1),
+              detail: "Davet halkaları, viral kancalar, A/B testleri. Yeni kullanıcı kazanımı hızlanır.",
+              baseCost: 12_000, costGrowth: 4.5, maxLevel: 5, effect: .growthMult(0.15), unlockStage: 1),
         .init(id: 2, name: "Premium Paket", icon: "💎",
-              detail: "Kullanıcı başına gelir (ARPU) artar.", baseCost: 18_000, costGrowth: 4.0, maxLevel: 5,
-              effect: .arpuMult(0.18), unlockStage: 1),
+              detail: "Ücretli katmanlar ve yıllık planlar. Kullanıcı başına gelir (ARPU) artar.",
+              baseCost: 18_000, costGrowth: 4.0, maxLevel: 5, effect: .arpuMult(0.18), unlockStage: 2),
         .init(id: 3, name: "Müşteri Başarısı", icon: "🎧",
-              detail: "Churn (kullanıcı kaybı) azalır.", baseCost: 15_000, costGrowth: 4.5, maxLevel: 5,
-              effect: .churnReduce(0.12), unlockStage: 2),
+              detail: "Onboarding, sağlık skorları, proaktif destek. Kullanıcı kaybı (churn) düşer.",
+              baseCost: 15_000, costGrowth: 4.5, maxLevel: 5, effect: .churnReduce(0.12), unlockStage: 2),
         .init(id: 4, name: "Şirket Kültürü", icon: "🌱",
-              detail: "Takım morali yükselir.", baseCost: 10_000, costGrowth: 3.5, maxLevel: 5,
-              effect: .moraleTarget(6.0), unlockStage: 0),
+              detail: "Net değerler, ritüeller ve güven. Ekip kendini ait hisseder; moral tabanı yükselir.",
+              baseCost: 10_000, costGrowth: 3.5, maxLevel: 5, effect: .moraleTarget(6.0), unlockStage: 0),
         .init(id: 5, name: "Uzaktan Çalışma", icon: "🏠",
-              detail: "Maaş maliyetleri düşer.", baseCost: 22_000, costGrowth: 4.0, maxLevel: 4,
-              effect: .salaryReduce(0.06), unlockStage: 2),
+              detail: "Coğrafyadan bağımsız yetenek havuzu. Maaş baskısı azalır, verim korunur.",
+              baseCost: 22_000, costGrowth: 4.0, maxLevel: 4, effect: .salaryReduce(0.06), unlockStage: 3),
         .init(id: 6, name: "Sunucu Optimizasyonu", icon: "🗄️",
-              detail: "Bulut & sunucu giderleri düşer.", baseCost: 14_000, costGrowth: 4.2, maxLevel: 5,
-              effect: .infraCostReduce(0.15), unlockStage: 1),
+              detail: "Caching, otomatik kapatma, doğru enstans tipleri. Bulut faturası incelir.",
+              baseCost: 14_000, costGrowth: 4.2, maxLevel: 5, effect: .infraCostReduce(0.15), unlockStage: 1),
         .init(id: 7, name: "Hibrit Ofis", icon: "🏢",
-              detail: "Ofis kirası giderleri düşer.", baseCost: 20_000, costGrowth: 4.0, maxLevel: 4,
-              effect: .rentCostReduce(0.12), unlockStage: 2),
+              detail: "Esnek masa düzeni, daha küçük metrekare. Ofis kirası yükü hafifler.",
+              baseCost: 20_000, costGrowth: 4.0, maxLevel: 4, effect: .rentCostReduce(0.12), unlockStage: 3),
+        // ── YENİ geç-evre derinleşme (id 8-13) — mevcut modüllerin ileri katmanları ──
+        .init(id: 8, name: "Otomatik Ölçekleme", icon: "📈",
+              detail: "CI/CD üzerine kurulan elastik altyapı: trafik patlasa da sistem kendini büyütür. Mühendislik tek hamlede daha çok iş çıkarır.",
+              baseCost: 120_000, costGrowth: 4.0, maxLevel: 4, effect: .globalOutput(0.14), unlockStage: 4),
+        .init(id: 9, name: "Performans Pazarlama", icon: "🎯",
+              detail: "Veri odaklı kanal ekipleri ve atıf modelleri. Büyük bütçeler verimli kullanıcıya döner; büyüme ölçekte sürer.",
+              baseCost: 160_000, costGrowth: 4.2, maxLevel: 4, effect: .growthMult(0.20), unlockStage: 4),
+        .init(id: 10, name: "Kurumsal Satış", icon: "🏛️",
+              detail: "Saha ekibi, yıllık sözleşmeler, SLA'lar. Büyük müşteriler kullanıcı başına geliri kalıcı yukarı çeker.",
+              baseCost: 320_000, costGrowth: 4.0, maxLevel: 4, effect: .arpuMult(0.22), unlockStage: 5),
+        .init(id: 11, name: "Tahminsel Elde Tutma", icon: "🧲",
+              detail: "Ayrılma sinyallerini önceden yakalayan modeller. Risk taşıyan hesaplara zamanında dokunulur; churn belirgin düşer.",
+              baseCost: 280_000, costGrowth: 4.2, maxLevel: 4, effect: .churnReduce(0.14), unlockStage: 5),
+        .init(id: 12, name: "FinOps Disiplini", icon: "💠",
+              detail: "Bulut harcamasını sahiplenen ekip; rezervasyon, yük dengeleme, sürekli izleme. Altyapı gideri ölçekte bile kontrol altında.",
+              baseCost: 500_000, costGrowth: 4.0, maxLevel: 3, effect: .infraCostReduce(0.18), unlockStage: 6),
+        .init(id: 13, name: "Misyon & Liderlik", icon: "✨",
+              detail: "Olgun lider kademesi, net misyon, hisse programları. Binlerce kişilik kadroda bile moral tabanı sağlam kalır.",
+              baseCost: 450_000, costGrowth: 3.8, maxLevel: 3, effect: .moraleTarget(8.0), unlockStage: 6),
     ]
 
     // MARK: Funding evreleri
@@ -442,6 +464,40 @@ enum Balance {
         .init(id: 40, name: "Telefon Kabini",   category: .infra,       icon: "phone.fill",                 cost: 2_200,   areaM2: 2,  seatCapacity: 0, moraleBonus: 1,   outputBonus: 0.02, reputationBonus: 0, unlockStage: 1),
         .init(id: 41, name: "Resepsiyon Bankosu",category: .infra,      icon: "person.crop.rectangle.fill", cost: 4_000,   areaM2: 6,  seatCapacity: 0, moraleBonus: 0,   outputBonus: 0.0,  reputationBonus: 3, unlockStage: 2),
         .init(id: 42, name: "Konferans Ekranı", category: .infra,       icon: "videoprojector.fill",        cost: 5_000,   areaM2: 2,  seatCapacity: 0, moraleBonus: 0,   outputBonus: 0.03, reputationBonus: 1, unlockStage: 2),
+
+        // --- Geç-evre genişleme (Track A): büyüdükçe mağaza değişsin, statü/lüks dalgaları ---
+        // s2 SEED: departman vitrini
+        .init(id: 43, name: "Cam Toplantı Odası",   category: .infra,       icon: "rectangle.split.3x1.fill",   cost: 9_000,    areaM2: 16, seatCapacity: 0, moraleBonus: 2,  outputBonus: 0.05, reputationBonus: 3,  unlockStage: 2),
+        .init(id: 44, name: "Telefon Kabinleri",    category: .infra,       icon: "phone.bubble.fill",          cost: 7_500,    areaM2: 8,  seatCapacity: 0, moraleBonus: 3,  outputBonus: 0.04, reputationBonus: 1,  unlockStage: 2),
+        .init(id: 45, name: "Premium Espresso Bar",  category: .kitchen,     icon: "cup.and.heat.waves.fill",    cost: 11_000,   areaM2: 6,  seatCapacity: 0, moraleBonus: 8,  outputBonus: 0.0,  reputationBonus: 2,  unlockStage: 2),
+        // s3 SERIES A: lüks dalgası
+        .init(id: 46, name: "Yönetici Kanepe Seti",  category: .comfort,     icon: "sofa.fill",                  cost: 22_000,   areaM2: 14, seatCapacity: 0, moraleBonus: 9,  outputBonus: 0.0,  reputationBonus: 6,  unlockStage: 3),
+        .init(id: 47, name: "Bistro Mutfak",         category: .kitchen,     icon: "fork.knife",                 cost: 28_000,   areaM2: 22, seatCapacity: 0, moraleBonus: 10, outputBonus: 0.0,  reputationBonus: 5,  unlockStage: 3),
+        .init(id: 48, name: "Yeşil Atriyum",         category: .plant,       icon: "tree.circle.fill",           cost: 24_000,   areaM2: 18, seatCapacity: 0, moraleBonus: 6,  outputBonus: 0.0,  reputationBonus: 9,  unlockStage: 3),
+        .init(id: 49, name: "Tasarım Stüdyosu",      category: .workstation, icon: "pencil.and.ruler.fill",      cost: 18_000,   areaM2: 14, seatCapacity: 2, moraleBonus: 4,  outputBonus: 0.06, reputationBonus: 4,  unlockStage: 3),
+        .init(id: 50, name: "Sessiz Odaklanma Odası", category: .comfort,    icon: "speaker.slash.fill",         cost: 15_000,   areaM2: 10, seatCapacity: 0, moraleBonus: 7,  outputBonus: 0.04, reputationBonus: 2,  unlockStage: 3),
+        .init(id: 51, name: "Kütüphane Salonu",      category: .comfort,     icon: "books.vertical.circle.fill", cost: 20_000,   areaM2: 16, seatCapacity: 0, moraleBonus: 6,  outputBonus: 0.03, reputationBonus: 5,  unlockStage: 3),
+        // s4 SERIES B: prestij dalgası
+        .init(id: 52, name: "Şampanya Lounge",       category: .luxury,      icon: "wineglass.fill",             cost: 55_000,   areaM2: 18, seatCapacity: 0, moraleBonus: 11, outputBonus: 0.0,  reputationBonus: 8,  unlockStage: 4),
+        .init(id: 53, name: "Kapalı Yüzme Havuzu",   category: .luxury,      icon: "figure.pool.swim",           cost: 90_000,   areaM2: 60, seatCapacity: 0, moraleBonus: 13, outputBonus: 0.0,  reputationBonus: 9,  unlockStage: 4),
+        .init(id: 54, name: "Fitness Merkezi",       category: .luxury,      icon: "dumbbell.fill",              cost: 60_000,   areaM2: 45, seatCapacity: 0, moraleBonus: 12, outputBonus: 0.02, reputationBonus: 7,  unlockStage: 4),
+        .init(id: 55, name: "Yönetim Kurulu Odası",  category: .infra,       icon: "person.3.sequence.fill",     cost: 45_000,   areaM2: 24, seatCapacity: 0, moraleBonus: 3,  outputBonus: 0.07, reputationBonus: 10, unlockStage: 4),
+        .init(id: 56, name: "İç Bahçe & Şelale",     category: .plant,       icon: "drop.degreesign.fill",       cost: 70_000,   areaM2: 30, seatCapacity: 0, moraleBonus: 8,  outputBonus: 0.0,  reputationBonus: 12, unlockStage: 4),
+        .init(id: 57, name: "Barista Kafe",          category: .kitchen,     icon: "cup.and.saucer.fill",        cost: 50_000,   areaM2: 28, seatCapacity: 0, moraleBonus: 11, outputBonus: 0.0,  reputationBonus: 6,  unlockStage: 4),
+        .init(id: 58, name: "Sürme Cam Cephe",       category: .luxury,      icon: "sun.horizon.fill",           cost: 80_000,   areaM2: 20, seatCapacity: 0, moraleBonus: 9,  outputBonus: 0.0,  reputationBonus: 11, unlockStage: 4),
+        // s5 SERIES C: plaza ölçeği
+        .init(id: 59, name: "Heykel Holü",           category: .luxury,      icon: "figure.stand",               cost: 140_000,  areaM2: 30, seatCapacity: 0, moraleBonus: 7,  outputBonus: 0.0,  reputationBonus: 16, unlockStage: 5),
+        .init(id: 60, name: "Panoramik Tepe Lobi",   category: .luxury,      icon: "building.2.crop.circle.fill",cost: 200_000,  areaM2: 50, seatCapacity: 0, moraleBonus: 12, outputBonus: 0.0,  reputationBonus: 14, unlockStage: 5),
+        .init(id: 61, name: "Veri Merkezi Salonu",   category: .infra,       icon: "externaldrive.connected.to.line.below.fill", cost: 120_000, areaM2: 40, seatCapacity: 0, moraleBonus: 0, outputBonus: 0.09, reputationBonus: 6, unlockStage: 5),
+        .init(id: 62, name: "Sergi Sanat Galerisi",  category: .luxury,      icon: "photo.artframe",             cost: 180_000,  areaM2: 35, seatCapacity: 0, moraleBonus: 8,  outputBonus: 0.0,  reputationBonus: 18, unlockStage: 5),
+        .init(id: 63, name: "Şehir Manzaralı Teras", category: .luxury,      icon: "binoculars.fill",            cost: 150_000,  areaM2: 55, seatCapacity: 0, moraleBonus: 14, outputBonus: 0.0,  reputationBonus: 12, unlockStage: 5),
+        .init(id: 64, name: "Inovasyon Laboratuvarı",category: .workstation, icon: "flask.fill",                 cost: 110_000,  areaM2: 36, seatCapacity: 4, moraleBonus: 6,  outputBonus: 0.08, reputationBonus: 8,  unlockStage: 5),
+        // s6 UNICORN: kampüs / efsane ölçek
+        .init(id: 65, name: "Kampüs Meydanı",        category: .plant,       icon: "tree.fill",                  cost: 500_000,  areaM2: 120, seatCapacity: 0, moraleBonus: 15, outputBonus: 0.0,  reputationBonus: 25, unlockStage: 6),
+        .init(id: 66, name: "Auditorium",            category: .infra,       icon: "music.mic",                  cost: 600_000,  areaM2: 100, seatCapacity: 0, moraleBonus: 10, outputBonus: 0.06, reputationBonus: 20, unlockStage: 6),
+        .init(id: 67, name: "Roof-top Helikopter Pisti", category: .luxury,  icon: "helicopter",                 cost: 800_000,  areaM2: 80,  seatCapacity: 0, moraleBonus: 12, outputBonus: 0.0,  reputationBonus: 30, unlockStage: 6),
+        .init(id: 68, name: "İkonik Atriyum Heykeli",category: .luxury,      icon: "sparkles",                   cost: 750_000,  areaM2: 60,  seatCapacity: 0, moraleBonus: 14, outputBonus: 0.0,  reputationBonus: 28, unlockStage: 6),
+        .init(id: 69, name: "Kampüs Araştırma Merkezi", category: .workstation, icon: "building.columns.fill",   cost: 550_000,  areaM2: 90,  seatCapacity: 6, moraleBonus: 8,  outputBonus: 0.10, reputationBonus: 18, unlockStage: 6),
     ]
     static func officeItem(_ id: Int) -> OfficeItemDef? { officeItems.first { $0.id == id } }
 

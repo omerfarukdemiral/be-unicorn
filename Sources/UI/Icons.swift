@@ -48,6 +48,12 @@ enum Icons {
         static let remote      = "house.fill"                  // id 5 - Uzaktan Çalışma
         static let server      = "server.rack"                 // id 6 - Sunucu Optimizasyonu
         static let hybrid      = "building.fill"               // id 7 - Hibrit Ofis
+        static let autoscale   = "chart.line.uptrend.xyaxis"   // id 8 - Otomatik Ölçekleme
+        static let perfMkt     = "scope"                       // id 9 - Performans Pazarlama
+        static let enterprise  = "building.columns.fill"       // id 10 - Kurumsal Satış
+        static let retention   = "magnet.fill"                 // id 11 - Tahminsel Elde Tutma
+        static let finops      = "creditcard.circle.fill"      // id 12 - FinOps Disiplini
+        static let mission     = "sparkles"                    // id 13 - Misyon & Liderlik
 
         /// Modül id'ye göre SF Symbol adını döndürür.
         static func symbol(for id: Int) -> String {
@@ -60,6 +66,12 @@ enum Icons {
             case 5: return remote
             case 6: return server
             case 7: return hybrid
+            case 8: return autoscale
+            case 9: return perfMkt
+            case 10: return enterprise
+            case 11: return retention
+            case 12: return finops
+            case 13: return mission
             default: return "square.grid.2x2"
             }
         }
