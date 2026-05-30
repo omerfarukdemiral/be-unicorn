@@ -135,6 +135,9 @@ struct GameState: Codable {
     var lastSaved: Date = Date()
     var hasSeenOnboarding: Bool = false
     var currency: Currency = .usd       // görüntü para birimi (TL/Euro/Dolar)
+    // Aktivite Akışı (Track C) — modal yerine ekranda kalıcı biriken olaylar (son ~30).
+    var feed: [FeedEntry] = []
+    var feedUnread: Int = 0   // HUD okunmamış rozeti (Ofis'e dönünce sıfırlanır)
     var founderLeaning: Int = FounderLeaning.balanced.rawValue      // A1: kuruluşta beyan edilen eğilim (mekanik etki yok)
     var detectedArchetype: String = FounderArchetype.unknown.rawValue  // C3: runtime tespit edilen arketip
 
@@ -231,6 +234,8 @@ struct GameState: Codable {
         currency = g(.currency, Currency.usd)
         founderLeaning = g(.founderLeaning, FounderLeaning.balanced.rawValue)
         detectedArchetype = g(.detectedArchetype, FounderArchetype.unknown.rawValue)
+        feed = g(.feed, [FeedEntry]())
+        feedUnread = g(.feedUnread, 0)
     }
 
     mutating func normalize() {
@@ -351,6 +356,7 @@ struct GameState: Codable {
             return fixed
         }
         syncMembersToHeadcount()
+        normalizeFeed()
     }
 
     /// `headcount` ile `members` arasını eşle: eksik departmanlara generic isimli üye ekle,
@@ -379,6 +385,12 @@ struct GameState: Codable {
                 }
             }
         }
+    }
+
+    // Aktivite Akışı: en yeni başta tutulur; son 30 saklanır (eski budanır).
+    private mutating func normalizeFeed() {
+        if feed.count > 30 { feed = Array(feed.prefix(30)) }
+        feedUnread = max(0, min(feedUnread, feed.count))
     }
 
     private static func resized(_ array: [Int], to n: Int) -> [Int] {

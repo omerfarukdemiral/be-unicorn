@@ -365,21 +365,10 @@ struct ContentView: View {
             FundingRoundView(model: model, theme: theme, stageIndex: s)
         } else if let finale = model.pendingSeasonFinale {
             SeasonFinaleView(model: model, theme: theme, finale: finale)
-        } else if let scenarioResult = model.pendingScenarioResult {
-            ScenarioResultView(model: model, theme: theme, result: scenarioResult)
-        } else if let review = model.pendingCycleReview {
-            CycleReviewView(model: model, theme: theme, review: review)
-        } else if let sprint = model.pendingSprintClose {
-            SprintCloseView(model: model, theme: theme, close: sprint)
-        } else if let close = model.pendingDailyClose {
-            DailyCloseView(model: model, theme: theme, close: close)
         } else if let card = model.pendingEvent {
+            // Track C: ScenarioResult/CycleReview/SprintClose/DailyClose/ResultCard/Offline
+            // artık MODAL değil → ekran-içi AKIŞA (ActivityFeedView) düşüyor.
             DecisionCardView(model: model, theme: theme, card: card)
-        } else if let result = model.pendingResult {
-            // #26: karardan sonra kalıcı sonuç kartı (ders köprülü) — toast'ın yerine.
-            ResultCardView(model: model, theme: theme, result: result)
-        } else if let report = model.pendingOfflineReport {
-            OfflineReportView(theme: theme, report: report) { model.pendingOfflineReport = nil }
         } else if let dept = model.inspectedDept {
             EmployeeCardView(model: model, theme: theme, deptIndex: dept)
         }

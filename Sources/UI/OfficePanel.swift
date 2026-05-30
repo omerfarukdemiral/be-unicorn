@@ -32,6 +32,7 @@ struct OfficePanel: View {
                 FloorPlanView(model: model, theme: theme)
                     .frame(maxHeight: .infinity)
                 actionStrip
+                ActivityFeedView(model: model, theme: theme)   // Track C: ekran-içi olay akışı
             } else {
                 ProjectsPanel(model: model, theme: theme)
                     .frame(maxHeight: .infinity)

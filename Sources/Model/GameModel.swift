@@ -23,6 +23,9 @@ final class GameModel: ObservableObject {
     @Published var pendingScenarioResult: ScenarioResult? = nil  // senaryo deadline sonucu (başarı/başarısızlık overlay'i)
     @Published var pendingToast: String? = nil
     @Published var pendingResult: DecisionResult? = nil   // karar sonucu kalıcı kartı (#26) + ders köprüsü
+    // Track C: feed satırından zengin detay-sheet açabilmek için son scorecard payload cache'i.
+    var lastCycleReview: CycleReview? = nil
+    var lastSeasonFinale: SeasonFinale? = nil
     @Published var inspectedMechanic: String? = nil       // #19: ℹ/metrik/sonuç → ilgili Defter dersi
 
     /// B1: bu oyunda en çok dokunulan ilk 3 karar mekaniği (frekansa göre azalan;
@@ -33,6 +36,32 @@ final class GameModel: ObservableObject {
             .sorted { ($0.value, $1.key) > ($1.value, $0.key) }
             .prefix(3)
             .map { $0.key }
+    }
+
+    // MARK: - Aktivite Akışı (Track C)
+    /// Feed'e yeni girdi ekle (en yeni BAŞTA). 30 üstünü budar, okunmamış sayacı artırır.
+    /// pending* modal yayını yerine bunu çağır — retention mutasyonları (sayaç/ödül) AYNEN kalır.
+    func pushFeed(_ kind: FeedKind, _ title: String, _ summary: String,
+                  positive: Bool = true, mechanic: String? = nil,
+                  detail: FeedDetailKind? = nil) {
+        let e = FeedEntry(kind: kind, title: title, summary: summary, atMonth: state.months,
+                          positive: positive, mechanic: mechanic, detail: detail)
+        state.feed.insert(e, at: 0)
+        if state.feed.count > 30 { state.feed = Array(state.feed.prefix(30)) }
+        state.feedUnread += 1
+        objectWillChange.send()
+    }
+
+    var feedEntries: [FeedEntry] { state.feed }
+    var feedUnread: Int { state.feedUnread }
+    var companyMonths: Double { state.months }
+
+    /// Ofis/feed görünür olunca okunmamış sayacını sıfırla (HUD rozeti söner).
+    func markFeedRead() {
+        guard state.feedUnread > 0 else { return }
+        state.feedUnread = 0
+        for i in state.feed.indices { state.feed[i].read = true }
+        objectWillChange.send()
     }
     @Published var inspectedDept: Int? = nil   // ofiste çalışana tıklanınca açılan kart
     @Published var founderTip: String = NarrativeContent.tips.first ?? ""
@@ -776,13 +805,19 @@ final class GameModel: ObservableObject {
         state.seasonScoreSum += breakdown.score
         state.seasonHighestTier = max(state.seasonHighestTier, state.leagueTier)
 
-        pendingCycleReview = CycleReview(quarter: quarterNumber,
-                                         breakdown: breakdown,
-                                         movement: move,
-                                         fromTier: fromTier,
-                                         toTier: state.leagueTier,
-                                         standings: standings,
-                                         playerRank: rank)
+        // Track C: çeyrek kapanışı → AKIŞA (zengin scorecard "detay >"te). Modal YOK.
+        // Payload'u cache'le ki feed satırından detay-sheet açılabilsin.
+        lastCycleReview = CycleReview(quarter: quarterNumber,
+                                      breakdown: breakdown,
+                                      movement: move,
+                                      fromTier: fromTier,
+                                      toTier: state.leagueTier,
+                                      standings: standings,
+                                      playerRank: rank)
+        let moveText = move == .promote ? "Terfi ettin!" : (move == .demote ? "Bir lig düştün." : "Ligini korudun.")
+        pushFeed(.quarter, "Çeyrek \(quarterNumber) Kapandı",
+                 "Skor \(Int(breakdown.score)) · Sıra \(rank)/\(standings.count) · \(moveText)",
+                 positive: move != .demote, detail: .quarter)
         // Çeyrek kapanışı: terfi → kutlama, düşüş → uyarı, sabit → tok kapanış.
         switch outcome {
         case .promote: Feedback.celebrate()
@@ -790,6 +825,8 @@ final class GameModel: ObservableObject {
         case .stay:    Feedback.close()
         }
         save()
+        // Modal kalktı → çeyrek OTOMATİK ilerler (eskiden "Yeni Çeyrek" butonu çağırırdı).
+        startNextQuarter()
     }
 
     /// "Yeni Çeyrek" — taze çeyrek başlat, snapshot sıfırla. Sezon doluysa finale tetikle.
@@ -847,6 +884,12 @@ final class GameModel: ObservableObject {
             title: SeasonSystem.title(forSeason: earnedSeason),
             bonusGained: SeasonSystem.bonusForCompleting(season: earnedSeason),
             totalBonusAfter: SeasonSystem.totalMultiplier(seasonsCompleted: earnedSeason) - 1)
+        lastSeasonFinale = pendingSeasonFinale   // Track C: feed detayı için cache (modal KALIR + feed özeti)
+        let titleName = SeasonSystem.title(forSeason: earnedSeason).name
+        let totalBonus = SeasonSystem.totalMultiplier(seasonsCompleted: earnedSeason) - 1
+        pushFeed(.season, "Sezon \(earnedSeason) Tamamlandı",
+                 "\(titleName) ünvanı kazanıldı · kalıcı +%\(Int(totalBonus * 100)) üretim.",
+                 positive: true, detail: .season)
         Feedback.celebrate()   // sezon finali — görkemli kutlama
     }
 
@@ -955,8 +998,10 @@ final class GameModel: ObservableObject {
         state.morale = min(100, state.morale + Balance.dailyCompleteMoraleBonus)
         state.reputation = min(100, state.reputation + Balance.dailyCompleteReputationBonus)
 
-        pendingDailyClose = DailyClose(streak: state.streak,
-                                       streakMoraleBonus: streakMoraleBonus)
+        // Track C: günlük kapanış → AKIŞA (modal yok).
+        pushFeed(.daily, "Günlük Hedef Tamam · \(state.streak) gün",
+                 "Moral +\(Int(Balance.dailyCompleteMoraleBonus)) · İtibar +\(Int(Balance.dailyCompleteReputationBonus)). Yarın da gel, serini büyüt.",
+                 positive: true)
         Feedback.success()   // günlük hedef kapanışı / kutlama
         save()
     }
@@ -1040,13 +1085,10 @@ final class GameModel: ObservableObject {
             state.reputation = min(100, state.reputation + Balance.sprintWinReputationBonus)
         }
 
-        // En KÜÇÜK döngü olarak sprint EN HAFİF dokunuş olmalı: engelleyici modal +
-        // elle "Yeni Sprint" tıklaması artık YOK (spam'in kaynağıydı). Sonucu sağ-üst
-        // sessiz toast olarak göster ve hemen taze sprint başlat — akış kesilmez.
-        // (Daha büyük döngüler — çeyrek/sezon — blocking modal olmaya devam eder.)
-        pendingToast = success
-            ? "Sprint \(state.sprintIndex) tamam · \(goal.title) — hedefe ulaştın!"
-            : "Sprint \(state.sprintIndex) kapandı · hedef tutmadı, yeni sprint başladı."
+        // Track C: sprint sonucu → AKIŞA (toast bile yok — feed kalıcı). Otomatik ilerle.
+        pushFeed(.sprint, "Sprint \(state.sprintIndex) \(success ? "Tamam" : "Kapandı")",
+                 success ? "\(goal.title) — hedefe ulaştın!" : "\(goal.title) — hedef tutmadı, yeni sprint başladı.",
+                 positive: success)
         if success { Feedback.success() } else { Feedback.select() }
         startNewSprint()   // otomatik ilerle
         save()
@@ -1150,7 +1192,13 @@ final class GameModel: ObservableObject {
         s.succeeded = success
         state.scenarios[idx] = s
 
-        pendingScenarioResult = ScenarioResult(scenario: s, success: success, reward: reward)
+        // Track C: senaryo sonucu → AKIŞA (modal yok) + settled senaryoyu hemen temizle.
+        let rewardHint = reward.cash > 0 ? "+\(BigNumber.money(reward.cash))" :
+            (reward.reputation != 0 ? "İtibar \(reward.reputation > 0 ? "+" : "")\(Int(reward.reputation))" : "")
+        pushFeed(.scenario, success ? "\(s.scenarioKind.displayName): Hedef Tuttu" : "\(s.scenarioKind.displayName): Kaçtı",
+                 success ? "Başardın. \(rewardHint)" : "Bu sefer olmadı — sonraki fırsata.",
+                 positive: success)
+        state.scenarios.removeAll { $0.id == s.id }
         save()
     }
 
@@ -1227,16 +1275,13 @@ final class GameModel: ObservableObject {
         scheduleNextDecision()
         // #26: sonuç artık 3.5sn toast'ta UÇMUYOR — kalıcı, kapatılabilir bir kartta
         // gösterilir + "ilgili ders" köprüsü taşır (en zengin eğitici içerik korunur).
+        // Track C: karar sonucu artık MODAL değil → AKIŞA düşer (ders köprüsü mechanic ile korunur).
         if let line = choice.resultLine {
-            // HZ-1: ilk kararda tebriği sonuç kartına ekle (tek yüzey — toast z-order
-            // çakışması olmadan, suçlamasız "ilk bahsini koydun" dokunuşu).
-            let text = wasFirstDecision ? line + "\n\n" + NarrativeContent.firstDecisionPraise : line
-            pendingResult = DecisionResult(text: text,
-                                           speaker: card.speaker,
-                                           categoryRaw: card.category.rawValue,
-                                           mechanic: card.category.lessonMechanic)
-        } else if wasFirstDecision {
-            pendingToast = NarrativeContent.firstDecisionPraise
+            pushFeed(.decision, "Kararın Sonucu", line,
+                     positive: true, mechanic: card.category.lessonMechanic)
+        }
+        if wasFirstDecision {
+            pendingToast = NarrativeContent.firstDecisionPraise   // ilk-karar tebriği kısa toast (tek sefer)
         }
         Feedback.tap()   // karar verildi
         clamp()
@@ -1471,14 +1516,8 @@ final class GameModel: ObservableObject {
         }
         clamp()
         if let note = lastNote {
-            // Karar kartı açık değilse zengin sonuç kartı; açıksa çakışmamak için toast.
-            if pendingEvent == nil && pendingResult == nil {
-                pendingResult = DecisionResult(text: note, speaker: "Geçmiş Kararın",
-                                               categoryRaw: DecisionCategory.opportunity.rawValue,
-                                               mechanic: nil)
-            } else {
-                pendingToast = note
-            }
+            // Track C: gecikmeli karar sonucu → AKIŞA (modal/toast çakışması yok).
+            pushFeed(.delayed, "Geçmiş Kararın", note, positive: true)
             Feedback.warning()
         }
     }
@@ -1490,7 +1529,7 @@ final class GameModel: ObservableObject {
             && !state.celebratedUserMilestones.contains(m) {
             state.celebratedUserMilestones.append(m)
             if let msg = NarrativeContent.userMilestonePraise(m) {
-                pendingToast = msg
+                pushFeed(.milestone, "\(BigNumber.format(Double(m))) kullanıcı!", msg, positive: true)
                 Feedback.success()
             }
         }
@@ -1734,8 +1773,12 @@ final class GameModel: ObservableObject {
         state.cash += dCash
         state.users = max(0, state.users + dUsers)
         state.months += monthFraction
-        pendingOfflineReport = OfflineReport(seconds: elapsed, cashDelta: dCash,
-                                             usersDelta: dUsers)
+        // Track C: "yokken neler oldu" → AKIŞA (engellemeyen özet).
+        let h = Int(elapsed) / 3600, m = (Int(elapsed) % 3600) / 60
+        let timeText = h > 0 ? "\(h)sa \(m)dk" : "\(m)dk"
+        pushFeed(.offline, "Yokken Neler Oldu",
+                 "\(timeText) yoktun. Nakit \(dCash >= 0 ? "+" : "")\(BigNumber.money(dCash)) · Kullanıcı +\(BigNumber.format(max(0, dUsers))).",
+                 positive: dCash >= 0)
     }
 }
 
