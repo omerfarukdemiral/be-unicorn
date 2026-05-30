@@ -11,7 +11,11 @@ struct ItemShopView: View {
     @State private var cart: [Int: Int] = [:]
 
     private var items: [OfficeItemDef] {
-        Balance.officeItems.filter { $0.category == category }
+        // En yeni-evre eşyalar üstte: oyuncu büyüdükçe "yeni şeyler" hemen görünür,
+        // eski ucuz eşyalar altta kalır (eskimişlik hissini önler).
+        Balance.officeItems
+            .filter { $0.category == category }
+            .sorted { $0.unlockStage > $1.unlockStage }
     }
 
     // MARK: Sepet özetleri

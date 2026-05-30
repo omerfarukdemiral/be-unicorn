@@ -93,6 +93,29 @@ struct FundingRoundView: View {
                 .padding(Space.s4)
                 .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
 
+                // Track A: "büyüdüm + yeni şeyler açıldı" — bu turda açılan UI/mağaza vurguları.
+                let unlocks = Balance.stageUnlocks(stageIndex)
+                if !unlocks.isEmpty {
+                    VStack(alignment: .leading, spacing: Space.s2) {
+                        Text("BU TURDA AÇILDI")
+                            .font(.eyebrow).tracking(1.2)
+                            .foregroundStyle(Palette.gold)
+                        ForEach(unlocks, id: \.self) { u in
+                            HStack(spacing: Space.s2) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(theme.accent)
+                                Text(u).font(.appText(13, .medium))
+                                    .foregroundStyle(theme.text)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Space.s3)
+                    .background(theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.m))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.m).stroke(theme.accent.opacity(0.2)))
+                }
+
                 Button { Haptics.tap(); model.dismissFunding() } label: {
                     Text("Büyümeye Devam").font(.bodyL)
                         .modifier(AppButton.primary(theme))

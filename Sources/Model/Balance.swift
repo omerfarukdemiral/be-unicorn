@@ -501,6 +501,21 @@ enum Balance {
     ]
     static func officeItem(_ id: Int) -> OfficeItemDef? { officeItems.first { $0.id == id } }
 
+    /// Bir evreye geçince oyuncuya gösterilen "yeni açılan" kısa vurgular (Track A).
+    /// Sadece anlatı/yönlendirme — gating zaten state.stage ile yapılır. "Büyüdüm,
+    /// yeni şeyler açıldı" hissini tur kutlamasında tek bakışta verir.
+    static func stageUnlocks(_ stage: Int) -> [String] {
+        switch stage {
+        case 1: return ["Reklam bütçesi & MRR takibi", "Sosyal & mutfak eşyaları mağazada"]
+        case 2: return ["Churn & maliyet modülleri", "İlk gerçek ofis: konfor eşyaları"]
+        case 3: return ["Lüks eşya dalgası açıldı", "Tasarım stüdyosu & atriyum"]
+        case 4: return ["İleri ölçek modülleri", "Prestij eşyaları: havuz, spor, teras"]
+        case 5: return ["Kurumsal satış & FinOps modülleri", "Plaza ölçeği: sanat & statü eşyaları"]
+        case 6: return ["Unicorn kampüsü", "İkonik kampüs eşyaları"]
+        default: return []
+        }
+    }
+
     // MARK: Pazarlama / kullanıcı edinme (gerçek-hayat SaaS metrikleri)
     static let baseCAC: Double = 7.0          // taban müşteri edinme maliyeti ($/kullanıcı, evre 0)
     static let cacStageScaling: Double = 1.30 // CAC evreyle artar (kanallar doyar, rekabet artar)
