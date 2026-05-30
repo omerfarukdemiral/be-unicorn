@@ -67,17 +67,13 @@ struct FloorPlanView: View {
         return VStack(spacing: Space.s2) {
             GeometryReader { geo in
                 let cols = adaptiveColumns(width: geo.size.width)
-                let spacing: CGFloat = 8
+                let spacing: CGFloat = 12   // ferah: daha bol boşluk
                 let cellSize = (geo.size.width - spacing * CGFloat(cols - 1)) / CGFloat(cols)
 
                 ZStack(alignment: .topLeading) {
-                    // Mimari kroki arka planı: ince accent çerçeve + hafif grid.
+                    // Sade zemin — yoğun blueprint ızgarası KALDIRILDI; tek sakin yüzey.
                     RoundedRectangle(cornerRadius: Radius.m)
-                        .fill(Color.black.opacity(0.18))
-                    GridBackground(spacing: 22)
-                        .stroke(theme.hairline, lineWidth: 0.5)
-                    RoundedRectangle(cornerRadius: Radius.m)
-                        .stroke(theme.hairline, lineWidth: 1)
+                        .fill(Color.black.opacity(0.12))
 
                     if cells.isEmpty {
                         emptyHint
@@ -109,11 +105,10 @@ struct FloorPlanView: View {
     }
 
     private func adaptiveColumns(width: CGFloat) -> Int {
-        // Çok eşya oldukça daha sıkı grid; az eşyada ferah.
+        // Ferah yerleşim: büyük kartlar, az sütun (sıkışık 5-6 grid YOK).
         let n = cells.count
-        if n <= 6 { return 4 }
-        if n <= 16 { return 5 }
-        return 6
+        if n <= 6 { return 3 }
+        return 4   // çok eşyada bile en fazla 4 sütun → kartlar büyük kalır
     }
 
     private var emptyHint: some View {
@@ -181,44 +176,43 @@ private struct ItemTile: View {
     /// Bu koltuğu sahiplenen üyeler (en fazla seatCapacity adet). Avatarlar üst sağ köşede.
     var occupants: [TeamMember] = []
 
-    private var color: Color { Color(hex: cell.def.category.colorHex) }
+    private var catColor: Color { Color(hex: cell.def.category.colorHex) }
     /// Bu masada biri oturuyor mu — dolu masa "canlı" (parlak), boş masa sönük görünür.
     private var occupied: Bool { !occupants.isEmpty }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            VStack(spacing: 3) {
+            // Sade tek-ton: ikon accent (renk yarışı yok), kategori sadece küçük nokta.
+            VStack(spacing: 4) {
                 Image(systemName: cell.def.icon)
-                    .font(.system(size: size * 0.34, weight: .semibold))
-                    .foregroundStyle(occupied ? color : color.opacity(0.55))
-                    .frame(height: size * 0.42)
+                    .font(.system(size: size * 0.30, weight: .semibold))
+                    .foregroundStyle(occupied ? theme.accent : theme.accent.opacity(0.5))
+                    .frame(height: size * 0.40)
                 Text(cell.def.name)
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: 8.5, weight: .medium))
                     .foregroundStyle(occupied ? theme.textSecondary : theme.subtle)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .padding(4)
+            .padding(6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if occupied {
-                occupantBadges.padding(3)
-            }
+            // Kategori kimliği: sade küçük nokta (sol-üst) — renk yarışı yaratmaz.
+            Circle().fill(catColor.opacity(0.8)).frame(width: 5, height: 5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(6)
+
+            if occupied { occupantBadges.padding(5) }
         }
-        // Derinlik: yumuşak dikey gradient + dolu masada daha belirgin renk/kenarlık + hafif gölge.
+        // Sade nötr yüzey; dolu masa hafif accent ısısı + ince kenarlık.
         .background(
-            RoundedRectangle(cornerRadius: Radius.s)
-                .fill(LinearGradient(
-                    colors: [color.opacity(occupied ? 0.22 : 0.10),
-                             color.opacity(occupied ? 0.10 : 0.04)],
-                    startPoint: .top, endPoint: .bottom))
+            RoundedRectangle(cornerRadius: Radius.m)
+                .fill(occupied ? theme.accent.opacity(0.08) : Color.white.opacity(0.03))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.s)
-                .stroke(color.opacity(occupied ? 0.6 : 0.28), lineWidth: occupied ? 1.2 : 1)
+            RoundedRectangle(cornerRadius: Radius.m)
+                .stroke(occupied ? theme.accent.opacity(0.35) : theme.hairline, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(occupied ? 0.22 : 0.10), radius: occupied ? 4 : 2, y: 1)
     }
 
     /// Avatar yığını: en fazla 2 görünür başharf rozeti, fazlası "+N".
