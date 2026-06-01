@@ -4,16 +4,13 @@ import SwiftUI
 ///
 /// Tasarım dili:
 /// - Tek temiz katmanlı surfaceLow zemin (chunky bubble bar YOK, çift gradient + accent halo YOK).
-/// - Üst satır SOL: avatar + eyebrow + nakit kahraman + net/ay.
-///        SAĞ: kompakt zaman kontrol kapsülü + takvim chip + ses toggle.
+/// - Üst satır SOL: avatar + eyebrow + nakit kahraman + net/ay. (SAĞ kontrol kümesi —
+///        oynat/hız/sezon/defter/ayar — artık alt tab bar üstündeki ControlDockView'de.)
 /// - Orta satır: ince surfaceHigh stat satırı (users · MRR · runway).
 /// - Alt satır: iki ince hairline progress bar (moral · sıradaki tur) — 4pt.
 struct HUDView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
-    @Binding var soundEnabled: Bool
-    @Binding var settingsOpen: Bool
-    @Binding var lessonsOpen: Bool
 
     @State private var pulse = false
     @State private var cashPop: CGFloat = 1
@@ -74,19 +71,10 @@ struct HUDView: View {
 
     // MARK: - Üst satır: SOL (avatar + cash) · SAĞ (kontrol)
 
+    /// Üst satır: SOL kimlik+nakit kahramanı, SAĞ büyük kurucu/lig avatarı (sağ-üst boşluğu
+    /// dengeler — klasik oyun profili düzeni; kullanıcı geri bildirimi).
     private var topRow: some View {
         HStack(alignment: .center, spacing: Space.s3) {
-            leftGroup
-                .layoutPriority(1)
-            Spacer(minLength: Space.s2)
-            rightGroup
-                .fixedSize(horizontal: true, vertical: false)
-        }
-    }
-
-    private var leftGroup: some View {
-        HStack(spacing: Space.s2 + 2) {
-            avatarBadge
             VStack(alignment: .leading, spacing: 1) {
                 eyebrowRow
                 Text(BigNumber.money(model.cash))
@@ -96,6 +84,15 @@ struct HUDView: View {
                     .lineLimit(1).minimumScaleFactor(0.6)
                     .opacity(negative && pulse ? 0.7 : 1)
                 netLine
+            }
+            Spacer(minLength: Space.s2)
+            VStack(spacing: 3) {
+                avatarBadge
+                Text(model.currentLeague.name)
+                    .font(.appText(9, .semibold))
+                    .kerning(0.3)
+                    .foregroundStyle(leagueColor)
+                    .lineLimit(1)
             }
         }
     }
@@ -116,31 +113,32 @@ struct HUDView: View {
         .fixedSize(horizontal: false, vertical: false)
     }
 
-    /// Küçük dairesel avatar — 30pt, sade 1pt hairline halka, tap → leaderboard.
+    /// Dairesel kurucu avatarı — 46pt, accent halkalı, sağ-alt lig tier rozeti, tap → leaderboard.
+    /// Sağ-üstte kimlik çıpası olarak büyütüldü (boş köşeyi dengeler).
     private var avatarBadge: some View {
         Button { Haptics.tap(); showLeaderboard = true } label: {
             ZStack {
                 Circle()
                     .fill(theme.surfaceHigh)
-                    .frame(width: 32, height: 32)
-                    .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
+                    .frame(width: 46, height: 46)
+                    .overlay(Circle().stroke(leagueColor.opacity(0.55), lineWidth: 1.5))
                 Image(systemName: Icons.Screen.founder)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 23, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Palette.textPrimary)
-                // Sağ-alt: lig tier rozeti — küçük accent dolgulu daire.
+                // Sağ-alt: lig tier rozeti — accent dolgulu daire.
                 Circle()
                     .fill(leagueColor)
-                    .frame(width: 13, height: 13)
+                    .frame(width: 18, height: 18)
                     .overlay(
                         Text("\(model.leagueTier + 1)")
-                            .font(.appNumber(8, .heavy))
+                            .font(.appNumber(10, .heavy))
                             .foregroundStyle(.black.opacity(0.85))
                     )
-                    .overlay(Circle().stroke(theme.surfaceLow, lineWidth: 1.2))
-                    .offset(x: 11, y: 11)
+                    .overlay(Circle().stroke(theme.surfaceLow, lineWidth: 1.5))
+                    .offset(x: 16, y: 16)
             }
-            .frame(width: 32, height: 32)
+            .frame(width: 46, height: 46)
         }
         .buttonStyle(.pressable)
         .accessibilityLabel("Kurucu, \(model.currentLeague.name)")
@@ -201,107 +199,6 @@ struct HUDView: View {
         Rectangle()
             .fill(theme.hairline)
             .frame(width: 1, height: 22)
-    }
-
-    // MARK: - SAĞ: zaman kontrol + takvim + ses (alt alta)
-
-    private var rightGroup: some View {
-        VStack(alignment: .trailing, spacing: Space.s1 + 2) {
-            timeControlPill
-            // Sabit kontrol satırı: takvim (günler) · Defter · ayarlar — yüzen ikon YOK.
-            HStack(spacing: 5) {
-                calendarChip
-                bookButton
-                gearButton
-            }
-        }
-    }
-
-    /// Defter (dersler) — takvim ile ayar arasında SABİT buton (eskiden yüzen chip'ti).
-    private var bookButton: some View {
-        Button { Haptics.selection(); lessonsOpen = true } label: {
-            Image(systemName: "book.closed.fill")
-                .font(.system(size: 10.5, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(theme.accent)
-                .frame(width: 24, height: 24)
-                .background(theme.surfaceHigh, in: Circle())
-                .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
-        }
-        .buttonStyle(.pressable)
-        .accessibilityLabel("Defter")
-    }
-
-    private var timeControlPill: some View {
-        HStack(spacing: 0) {
-            timeButton(
-                systemName: model.isPaused ? "play.fill" : "pause.fill",
-                active: model.isPaused,
-                tint: Palette.warning
-            ) { Haptics.selection(); model.togglePause() }
-            Rectangle()
-                .fill(theme.hairline)
-                .frame(width: 1, height: 14)
-            timeButton(
-                systemName: "forward.fill",
-                label: "\(Int(model.speed))×",
-                active: model.speed > 1 && !model.isPaused,
-                tint: theme.accent
-            ) { Haptics.selection(); model.cycleSpeed() }
-        }
-        .padding(2)
-        .background(theme.surfaceHigh, in: Capsule())
-        .overlay(Capsule().stroke(theme.hairline, lineWidth: 1))
-    }
-
-    private func timeButton(systemName: String, label: String? = nil, active: Bool, tint: Color,
-                            action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 3) {
-                Image(systemName: systemName)
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(active ? .white : Palette.textSecondary)
-                if let label {
-                    Text(label).font(.appNumber(10.5, .heavy))
-                        .foregroundStyle(active ? .white : Palette.textSecondary)
-                }
-            }
-            .padding(.horizontal, Space.s2).padding(.vertical, 5)
-            .background(
-                Capsule().fill(active ? tint.opacity(0.92) : .clear)
-            )
-        }
-        .buttonStyle(.pressable)
-    }
-
-    private var calendarChip: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "calendar")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(Palette.textTertiary)
-            Text("Ç\(model.quarterNumber)·S\(model.seasonNumber)")
-                .font(.appNumber(10, .bold))
-                .foregroundStyle(Palette.textSecondary)
-        }
-        .padding(.horizontal, Space.s2).padding(.vertical, 4)
-        .background(theme.surfaceHigh, in: Capsule())
-        .overlay(Capsule().stroke(theme.hairline, lineWidth: 1))
-    }
-
-    private var gearButton: some View {
-        Button {
-            Haptics.tap(); settingsOpen = true
-        } label: {
-            Image(systemName: "gearshape.fill")
-                .font(.system(size: 10.5, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(Palette.textSecondary)
-                .frame(width: 24, height: 24)
-                .background(theme.surfaceHigh, in: Circle())
-                .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
-        }
-        .buttonStyle(.pressable)
-        .accessibilityLabel("Ayarlar")
     }
 
     // MARK: - ALT: iki ince progress bar (moral · sıradaki tur)

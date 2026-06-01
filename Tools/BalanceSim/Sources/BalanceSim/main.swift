@@ -200,6 +200,17 @@ enum Balance {
     static let cacStageScaling: Double = 1.30
     static let marketingAbsorption: Double = 5_000
     static let adBudgetStepBase: Double = 500
+
+    // MARK: Ürün-olgunluğu gelir kapısı (GameModel ile birebir — kalibrasyon hedefi)
+    // İlk ürün MVP eşiğinde doğar, atanan ekiple 1'e dek olgunlaşır. Olgunlaşmamış ürüne
+    // pazarlama büyük ölçüde boşa gider (ARPU↓ + churn↑). Bu blok burada AYARLANIR.
+    static let projectMVPThreshold: Double = 0.2
+    static let productArpuFloor: Double = 0.12
+    static let productChurnPenalty: Double = 1.6
+    static let projectDevReference: Double = 2.5
+    /// Birincil ürünün 0→1 tam olgunluğa referans dev gücünde kaç oyun-ayı sürdüğü
+    /// (oyundaki proje kategorisi buildMonths'larının ~ortalaması; Mobil 1.5 … AI 3.0).
+    static let projectBuildMonths: Double = 2.0
 }
 
 // =====================================================================
@@ -255,6 +266,10 @@ final class Sim {
     var founderEquity: Double = 1.0
 
     var adBudgetPerMonth: Double = 0     // oyuncunun ayarladığı aylık reklam bütçesi
+
+    // Birincil ürünün olgunluğu (0..1). MVP eşiğinde başlar; atanan ekip (devPower)
+    // her ay ilerletir. Gelir bu olgunluğa kapılıdır (productArpuGate / productChurnGate).
+    var productReadiness: Double = Balance.projectMVPThreshold
 
     var headcount: [Int]
     var moduleLevels: [Int]
@@ -329,8 +344,17 @@ final class Sim {
     var userCapacity: Double { max(50, devPower * 1_500) }
     var overload: Double { max(0, users / userCapacity - 1) }
 
+    // Ürün-olgunluğu kapıları (GameModel birebir).
+    var productArpuGate: Double {
+        Balance.productArpuFloor + (1 - Balance.productArpuFloor) * productReadiness
+    }
+    var productChurnGate: Double {
+        1 + Balance.productChurnPenalty * (1 - productReadiness)
+    }
+
     var churnRate: Double {
-        Balance.baseChurn * max(0.2, 1 - effects.churnReduce - opsPower * 0.01) * (1 + overload)
+        Balance.baseChurn * max(0.2, 1 - effects.churnReduce - opsPower * 0.01)
+            * (1 + overload) * productChurnGate
     }
 
     var arpu: Double {
@@ -338,6 +362,16 @@ final class Sim {
             * Balance.arpuMultiplier(forStage: stage)
             * (1 + effects.arpuMult)
             * (1 + min(Balance.salesArpuCap, salesPower * Balance.salesArpuPerUnit))
+            * productArpuGate
+    }
+
+    /// Ürünü ATANAN ekiple (devPower) ilerlet — advanceProjects birebir basitleştirmesi:
+    /// tüm mühendislik/ürün ürünü inşa eder (oyunda auto-assign). 1'e dek olgunlaşır.
+    func advanceProduct(_ monthFraction: Double) {
+        guard productReadiness < 1 else { return }
+        let accel = min(3.0, devPower / Balance.projectDevReference)
+        let months = max(0.5, Balance.projectBuildMonths)
+        productReadiness = min(1, productReadiness + monthFraction * accel / months)
     }
 
     var mrr: Double { users * arpu }
@@ -1002,6 +1036,7 @@ final class Runner {
         cumulativeAdSpend += s.adSpendPerMonth * monthFraction
 
         s.advanceEconomy(monthFraction)
+        s.advanceProduct(monthFraction)   // ürün ekiple olgunlaşır (gelir kapısını açar)
         s.updateMorale(dt)
 
         if s.cash < 0 { debtMonths += monthFraction } else { debtMonths = 0 }
@@ -1459,3 +1494,77 @@ if !times.isEmpty {
 if reports.contains(where: { $0.bankrupt }) {
     print("  UYARI: İflas eden arketip(ler) var — politika ya da Balance kalibrasyonu gerekli.")
 }
+
+// =====================================================================
+// MARK: (ii) ÜRÜN-OLGUNLUĞU ERKEN-OYUN KALİBRASYONU (yeni mekanik)
+// =====================================================================
+// Soru: "Sert" gelir kapısı + atanan-ekiple inşa, erken oyunu ANLAMLI ama
+// BUNALTICI DEĞİL kılıyor mu? İki yol karşılaştırılır:
+//   A) Naive  : ürünü inşa etmeden hemen pazarlamaya bas (kullanıcının şikayeti).
+//   B) Doğru  : önce ekibi ürüne ata/inşa et, olgunlukla pazarlamayı rampa et.
+// Her ay: olgunluk%, MRR, nakit, runway, churn. Garaj evresi (stage 0) tek ürün.
+
+struct EarlyRow { let m: Int; let readiness: Double; let mrr: Double; let users: Double
+                  let cash: Double; let net: Double; let churn: Double; let ad: Double }
+
+/// scenario: marketing bütçesini olgunluğa göre belirleyen kapanış. extraEng: ay 1'de
+/// eklenecek ek mühendis sayısı (inşayı hızlandırır).
+func runEarlyGame(months: Int, extraEng: Int,
+                  adBudget: (_ readiness: Double, _ month: Int) -> Double) -> [EarlyRow] {
+    let s = Sim()                       // 1 kurucu mühendis, readiness=MVP, cash=startCash
+    for _ in 0..<extraEng { _ = s.hire(0) }
+    var rows: [EarlyRow] = []
+    for m in 1...months {
+        s.adBudgetPerMonth = max(0, adBudget(s.productReadiness, m))
+        s.advanceEconomy(1.0)           // 1 oyun-ayı
+        s.advanceProduct(1.0)
+        s.updateMorale(1.0)
+        s.months += 1
+        rows.append(EarlyRow(m: m, readiness: s.productReadiness, mrr: s.mrr, users: s.users,
+                             cash: s.cash, net: s.netPerMonth, churn: s.churnRate,
+                             ad: s.adBudgetPerMonth))
+    }
+    return rows
+}
+
+func printEarly(_ title: String, _ rows: [EarlyRow]) {
+    print("\n  --- \(title) ---")
+    print("   ay | olgunluk | MRR/ay  | kullanıcı | net/ay   | nakit    | reklam")
+    for r in rows {
+        let runwayNote = r.cash < 0 ? "  ⚠️BATIK" : ""
+        print("   "
+            + pad("\(r.m)", 2) + " | "
+            + pad(String(format: "%.0f%%", r.readiness * 100), 8) + " | "
+            + pad(dollars(r.mrr), 7) + " | "
+            + pad(fmt(r.users), 9) + " | "
+            + pad(dollars(r.net), 8) + " | "
+            + pad(dollars(r.cash), 8) + " | "
+            + dollars(r.ad) + runwayNote)
+    }
+    let last = rows.last!
+    let firstMature = rows.first(where: { $0.readiness >= 0.999 })?.m
+    let minCash = rows.map { $0.cash }.min() ?? 0
+    print("   → 12.ay MRR \(dollars(last.mrr)), olgunluk %\(Int(last.readiness*100)), nakit \(dollars(last.cash)); min nakit \(dollars(minCash)); tam olgunluk: \(firstMature.map{"\($0).ay"} ?? "—")")
+}
+
+print("\n==========================================================")
+print(" (ii) ÜRÜN-OLGUNLUĞU ERKEN-OYUN KALİBRASYONU")
+print("==========================================================")
+print("  Sabitler: MVP eşiği %\(Int(Balance.projectMVPThreshold*100)), ARPU taban %\(Int(Balance.productArpuFloor*100)), churn cezası ×\(Balance.productChurnPenalty), buildMonths \(Balance.projectBuildMonths)")
+
+// A) Naive: ay 1'den itibaren sabit $2k/ay reklam, ürünü umursamadan.
+printEarly("A) NAIVE — inşa etmeden hemen pazarla ($2k/ay)",
+           runEarlyGame(months: 12, extraEng: 0, adBudget: { _, _ in 2_000 }))
+
+// B) Doğru (sadece kurucu): olgunluk %60'a dek reklam YOK, sonra olgunlukla rampa.
+printEarly("B) DOĞRU — önce inşa, sonra pazarla (sadece kurucu)",
+           runEarlyGame(months: 12, extraEng: 0, adBudget: { r, _ in r < 0.6 ? 0 : 1_500 * (r - 0.5) / 0.5 }))
+
+// C) Doğru + 1 mühendis: inşayı hızlandır (ekip yönetimi etkisi).
+printEarly("C) DOĞRU + 1 mühendis işe al (inşa hızlanır)",
+           runEarlyGame(months: 12, extraEng: 1, adBudget: { r, _ in r < 0.6 ? 0 : 1_500 * (r - 0.5) / 0.5 }))
+
+print("\n  YORUM: A (naive) erken pazarlama parası boşa gitmeli (MRR cılız, nakit erir);")
+print("         B/C ürün olgunlaşınca aynı/az reklamla daha sağlıklı MRR vermeli.")
+print("         Hedef: hiçbir yol 12 ayda BATIK olmamalı (bunaltıcı değil), ama A belirgin")
+print("         şekilde B/C'den zayıf olmalı (kapı anlamlı). Aksi halde sabitleri ayarla.")

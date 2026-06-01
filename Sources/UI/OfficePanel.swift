@@ -21,24 +21,34 @@ struct OfficePanel: View {
     @State private var subTab: OfficeSubTab = .kroki
 
     var body: some View {
-        VStack(spacing: Space.s3) {
-            // Sleek segment switcher — Kroki | Projeler
+        // Diğer panellerle (Ekip/Büyüme/Modüller) AYNI stabil yapı: içerik ScrollView içinde,
+        // VStack(s3) + Spacer(minLength:20) + padding(.horizontal s4, .top s3). Eski sabit
+        // (scroll'suz, maxHeight:.infinity'li) düzen içerik uzayınca taşıp tab bar'ı kesiyordu.
+        // Segment (Kroki|Projeler) sabit üstte; Projeler kendi ScrollView'una sahip ProjectsPanel
+        // olduğu için iç-içe scroll'dan kaçınmak adına yalnızca Kroki ScrollView'a sarılır.
+        VStack(spacing: 0) {
             segment
+                .padding(.horizontal, Space.s4)
+                .padding(.top, Space.s3)
+                .padding(.bottom, Space.s3)
 
             if subTab == .kroki {
-                if model.canRaise, let next = model.nextStage {
-                    raiseStrip(next)
+                ScrollView {
+                    VStack(spacing: Space.s3) {
+                        if model.canRaise, let next = model.nextStage {
+                            raiseStrip(next)
+                        }
+                        FloorPlanView(model: model, theme: theme)
+                        actionStrip
+                        ActivityFeedView(model: model, theme: theme)   // Track C: ekran-içi olay akışı
+                        Spacer(minLength: 20)
+                    }
+                    .padding(.horizontal, Space.s4)
                 }
-                FloorPlanView(model: model, theme: theme)
-                    .frame(maxHeight: .infinity)
-                actionStrip
-                ActivityFeedView(model: model, theme: theme)   // Track C: ekran-içi olay akışı
             } else {
                 ProjectsPanel(model: model, theme: theme)
-                    .frame(maxHeight: .infinity)
             }
         }
-        .padding(.vertical, Space.s2)
         .sheet(isPresented: $showShop) {
             ItemShopView(model: model, theme: theme)
         }

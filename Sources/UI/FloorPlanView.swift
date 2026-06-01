@@ -5,6 +5,9 @@ import SwiftUI
 struct FloorPlanView: View {
     @ObservedObject var model: GameModel
     var theme: Theme
+    /// Tuval genişliği — hücre boyutu (cellSize) ve buna bağlı tuval yüksekliği bundan
+    /// türetilir. Arka plandaki widthReader ölçer; layout absolute-offset ile dizilir.
+    @State private var canvasWidth: CGFloat = 0
 
     /// Krokide gösterilecek hücreler: her sahip olunan eşya adedi başına bir hücre.
     private var cells: [PlanCell] {
@@ -64,43 +67,62 @@ struct FloorPlanView: View {
 
     private var planCanvas: some View {
         let usage = model.totalAreaM2 > 0 ? min(1, model.usedAreaM2 / model.totalAreaM2) : 0
+        let cols = adaptiveColumns(width: canvasWidth)
+        let spacing: CGFloat = 12   // ferah: daha bol boşluk
+        // Genişlik ölçülene dek makul bir taban; ölçülünce kesin değer.
+        let cellSize = canvasWidth > 0
+            ? (canvasWidth - spacing * CGFloat(cols - 1)) / CGFloat(cols)
+            : 100
+        let rows = cells.isEmpty ? 0 : (cells.count + cols - 1) / cols
+        // İçeriğe göre KESİN minimum tuval yüksekliği. Eski maxHeight:.infinity tuvali
+        // ekran kalabalıkken hücre boyunun altına sıkıştırıp doluluk bar'ı + etiketlerle
+        // ÖRTÜŞTÜRÜYORDU. minHeight tabanı bu bindirmeyi tamamen kaldırır; fazla dikey alan
+        // varsa tuval büyür (boş m² hissi — temaya uygun), bar her zaman ALTTA kalır.
+        let gridHeight: CGFloat = cells.isEmpty
+            ? 132
+            : CGFloat(rows) * cellSize + CGFloat(max(0, rows - 1)) * spacing + 6
+
         return VStack(spacing: Space.s2) {
-            GeometryReader { geo in
-                let cols = adaptiveColumns(width: geo.size.width)
-                let spacing: CGFloat = 12   // ferah: daha bol boşluk
-                let cellSize = (geo.size.width - spacing * CGFloat(cols - 1)) / CGFloat(cols)
+            ZStack(alignment: .topLeading) {
+                // Sade zemin — yoğun blueprint ızgarası KALDIRILDI; tek sakin yüzey.
+                RoundedRectangle(cornerRadius: Radius.m)
+                    .fill(Color.black.opacity(0.12))
 
-                ZStack(alignment: .topLeading) {
-                    // Sade zemin — yoğun blueprint ızgarası KALDIRILDI; tek sakin yüzey.
-                    RoundedRectangle(cornerRadius: Radius.m)
-                        .fill(Color.black.opacity(0.12))
-
-                    if cells.isEmpty {
-                        emptyHint
-                            .frame(width: geo.size.width, height: geo.size.height)
-                    } else {
-                        // Ekibi masalara dağıt → masalarda canlı avatar rozetleri (artık boş değil).
-                        let seated = assignMembersToSeats(cells: cells, members: model.state.members)
-                        // Akış/grid packing: katalog sırasına göre soldan-sağa, satır satır.
-                        ForEach(Array(cells.enumerated()), id: \.offset) { idx, cell in
-                            let row = idx / cols
-                            let col = idx % cols
-                            ItemTile(cell: cell, theme: theme, size: cellSize,
-                                     occupants: seated[idx] ?? [])
-                                .frame(width: cellSize, height: cellSize)
-                                .offset(x: CGFloat(col) * (cellSize + spacing),
-                                        y: CGFloat(row) * (cellSize + spacing) + 6)
-                                .transition(.scale(scale: 0.4).combined(with: .opacity))
-                        }
+                if cells.isEmpty {
+                    emptyHint
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // Ekibi masalara dağıt → masalarda canlı avatar rozetleri (artık boş değil).
+                    let seated = assignMembersToSeats(cells: cells, members: model.state.members)
+                    // Akış/grid packing: katalog sırasına göre soldan-sağa, satır satır.
+                    ForEach(Array(cells.enumerated()), id: \.offset) { idx, cell in
+                        let row = idx / cols
+                        let col = idx % cols
+                        ItemTile(cell: cell, theme: theme, size: cellSize,
+                                 occupants: seated[idx] ?? [])
+                            .frame(width: cellSize, height: cellSize)
+                            .offset(x: CGFloat(col) * (cellSize + spacing),
+                                    y: CGFloat(row) * (cellSize + spacing) + 6)
+                            .transition(.scale(scale: 0.4).combined(with: .opacity))
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: Radius.m))
             }
-            .frame(maxHeight: .infinity)
+            .frame(minHeight: gridHeight, maxHeight: .infinity)
+            .background(widthReader)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.m))
             .animation(Motion.snappy, value: cells.count)
 
             // Doluluk bar'ı.
             occupancyBar(usage: usage)
+        }
+    }
+
+    /// Tuval genişliğini ölçüp `canvasWidth`'e yazan görünmez arka plan.
+    private var widthReader: some View {
+        GeometryReader { geo in
+            Color.clear
+                .onAppear { canvasWidth = geo.size.width }
+                .onChange(of: geo.size.width) { _, w in canvasWidth = w }
         }
     }
 

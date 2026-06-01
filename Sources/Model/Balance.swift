@@ -162,7 +162,8 @@ struct ProjectCategoryDef: Identifiable {
     let arpuBonus: Double       // ARPU'ya oransal katkı (live iken)
     let reputationBonus: Double // itibar tabanına puan (live iken)
     let buildCost: Double       // evre 0 başlangıç (geliştirme) maliyeti — evreyle ölçeklenir
-    let buildMonths: Double     // referans dev gücünde kaç oyun-ayı sürer
+    let buildMonths: Double     // referans dev gücünde kaç oyun-ayı sürer (0→1 tam olgunluk)
+    let features: [String]      // ürünün inşa edilecek özellikleri (devProgress eşiklerine yayılır)
 }
 
 // MARK: - Tüm sabitler tek kaynakta
@@ -540,6 +541,16 @@ enum Balance {
     /// Referans mühendislik gücü: bu seviyede projeler "normal" hızda yayına girer
     /// (devPower bunun üstündeyse hızlanır, altındaysa yavaşlar).
     static let projectDevReference: Double = 2.5
+    /// Ürünün "yayına" (gelir vermeye) başladığı olgunluk eşiği (MVP). Altı = geliştirme aşaması.
+    /// İlk özellik tamamlanınca (k/N, N=5 → 0.2) ürün yayına girer.
+    static let projectMVPThreshold: Double = 0.2
+    /// Ürün-olgunluğu ARPU kapısı (SERT): efektif ARPU = floor + (1-floor)·olgunluk.
+    /// floor=0.12 → ham ürün taban ARPU'nun ~%12'sini kazanır; olgunlukla 1'e çıkar.
+    /// (Olgunlaşmamış ürüne pazarlama harcamak boşa para — gerçek SaaS / PMF mantığı.)
+    static let productArpuFloor: Double = 0.12
+    /// Ürün-olgunluğu churn cezası: churn ×(1 + penalty·(1-olgunluk)). penalty=1.6 → ham
+    /// üründe ~2.6× churn → satın alınan kullanıcılar hızla kaçar, kalıcı MRR birikmez.
+    static let productChurnPenalty: Double = 1.6
     /// Yayındaki bir projenin değerlemeye sabit katkısı (portföy değeri).
     static let projectValuationEach: Double = 30_000
     /// Yeni proje başlatınca küçük moral dokunuşu (yeni hedef hevesi).
@@ -554,19 +565,33 @@ enum Balance {
 
     static let projectCategories: [ProjectCategoryDef] = [
         .init(id: 0, name: "Mobil Uygulama", icon: "iphone",            detail: "Hızlı kullanıcı büyümesi; düşük gelir.",
-              growthBonus: 0.10, arpuBonus: 0.04, reputationBonus: 1, buildCost: 8_000,  buildMonths: 1.5),
+              growthBonus: 0.10, arpuBonus: 0.04, reputationBonus: 1, buildCost: 8_000,  buildMonths: 1.5,
+              features: ["Çekirdek akış", "Kayıt & Giriş", "Push bildirim", "Çevrimdışı mod", "Analitik & A/B"]),
         .init(id: 1, name: "Web Platformu",  icon: "globe",             detail: "Dengeli; kullanıcı başına gelir güçlü.",
-              growthBonus: 0.05, arpuBonus: 0.10, reputationBonus: 1, buildCost: 12_000, buildMonths: 2.0),
+              growthBonus: 0.05, arpuBonus: 0.10, reputationBonus: 1, buildCost: 12_000, buildMonths: 2.0,
+              features: ["Çekirdek modül", "Hesap & roller", "Gösterge paneli", "Entegrasyonlar", "Faturalandırma"]),
         .init(id: 2, name: "Yapay Zeka",     icon: "sparkles",          detail: "Yüksek itibar + gelir; pahalı ve yavaş.",
-              growthBonus: 0.06, arpuBonus: 0.09, reputationBonus: 3, buildCost: 25_000, buildMonths: 3.0),
+              growthBonus: 0.06, arpuBonus: 0.09, reputationBonus: 3, buildCost: 25_000, buildMonths: 3.0,
+              features: ["Model v1", "Veri hattı", "Arayüz & prompt", "İnce ayar", "Ölçekli çıkarım"]),
         .init(id: 3, name: "API & Altyapı",  icon: "network",           detail: "Geliştirici geliri; sessiz büyüme.",
-              growthBonus: 0.03, arpuBonus: 0.08, reputationBonus: 2, buildCost: 15_000, buildMonths: 2.5),
+              growthBonus: 0.03, arpuBonus: 0.08, reputationBonus: 2, buildCost: 15_000, buildMonths: 2.5,
+              features: ["Uç noktalar", "Kimlik & anahtar", "Hız sınırlama", "SDK'lar", "SLA & izleme"]),
         .init(id: 4, name: "Oyun",           icon: "gamecontroller.fill", detail: "Patlayıcı büyüme; düşük ARPU.",
-              growthBonus: 0.13, arpuBonus: 0.03, reputationBonus: 2, buildCost: 10_000, buildMonths: 2.0),
+              growthBonus: 0.13, arpuBonus: 0.03, reputationBonus: 2, buildCost: 10_000, buildMonths: 2.0,
+              features: ["Çekirdek döngü", "Seviyeler", "Mağaza & IAP", "Sosyal & lider tablosu", "LiveOps"]),
         .init(id: 5, name: "Pazar Yeri",     icon: "bag.fill",          detail: "Dengeli büyüme + gelir; orta tempo.",
-              growthBonus: 0.08, arpuBonus: 0.07, reputationBonus: 1, buildCost: 18_000, buildMonths: 2.5),
+              growthBonus: 0.08, arpuBonus: 0.07, reputationBonus: 1, buildCost: 18_000, buildMonths: 2.5,
+              features: ["Liste & arama", "Ödeme akışı", "Satıcı paneli", "Değerlendirme", "Eşleştirme & lojistik"]),
     ]
     static func projectCategory(_ id: Int) -> ProjectCategoryDef? { projectCategories.first { $0.id == id } }
+
+    /// Bir kategorinin özelliklerini devProgress eşiklerine eşler (UI checklist için).
+    /// Özellik k (1..N) eşiği = k/N; ilk özellik MVP eşiğine (projectMVPThreshold) denk gelir.
+    static func projectFeatureMilestones(_ category: Int) -> [(name: String, threshold: Double)] {
+        guard let cat = projectCategory(category), !cat.features.isEmpty else { return [] }
+        let n = Double(cat.features.count)
+        return cat.features.enumerated().map { (idx, name) in (name, Double(idx + 1) / n) }
+    }
 
     // MARK: Programlı senaryolar (anlatısal, ay-mertebesinde hedefler)
     /// Aynı anda en fazla bu kadar aktif senaryo (oyuncu odağı bölünmesin).

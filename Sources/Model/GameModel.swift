@@ -90,7 +90,10 @@ final class GameModel: ObservableObject {
         } else {
             state = GameState()
         }
-        BigNumber.currency = state.currency
+        // Şimdilik para birimi yalnızca dolar — seçici kapalı (kullanıcı isteği).
+        // Eski kayıtlarda ₺/€ seçilmiş olsa bile görüntü dolara sabitlenir.
+        state.currency = .usd
+        BigNumber.currency = .usd
         applyOfflineProgress()
         seedQuarterSnapshotIfNeeded()
         seedSprintIfNeeded()
@@ -171,7 +174,8 @@ final class GameModel: ObservableObject {
     /// 1× / 2× / 3× — oyuncunun ayarladığı gerçek-zaman tempo çarpanı.
     @Published var speed: Double = 1
     /// Simülatörü duraklatma (zaman donar; tick economy/karar/moral işlemez).
-    @Published var isPaused: Bool = false
+    /// Oyun DURAKLI başlar (kullanıcı isteği): zaman yalnız oyuncu ▶ deyince akar.
+    @Published var isPaused: Bool = true
     static let speedOptions: [Double] = [1, 2, 3]
     func cycleSpeed() {
         let opts = Self.speedOptions
@@ -322,17 +326,39 @@ final class GameModel: ObservableObject {
     var userCapacity: Double { max(50, devPower * 1_500) }
     private var overload: Double { max(0, state.users / userCapacity - 1) }
 
-    var churnRate: Double {
-        Balance.baseChurn * max(0.2, 1 - effects.churnReduce - opsPower * 0.01) * (1 + overload)
+    /// Ürün olgunluğu (0..1): yayındaki ürünlerin ortalama geliştirilmişliği. Pazarlamanın
+    /// kalıcı gelire dönmesi için ürünün inşa edilmiş olması gerekir (gerçek SaaS / PMF mantığı).
+    /// Yayında ürün yoksa 0 → gelir kapısı tam kapalı.
+    var productReadiness: Double {
+        let live = liveProjects
+        guard !live.isEmpty else { return 0 }
+        return live.reduce(0) { $0 + min(1, max(0, $1.devProgress)) } / Double(live.count)
     }
 
-    /// Kullanıcı başına aylık gelir (taban × evre çarpanı × modül + proje katkıları × satış gücü).
-    /// Evre çarpanı: SaaS fiyatlandırma gücü/upsell modeller — Series C'de ARPU ~2× taban.
+    /// Ürün-olgunluğu gelir kapısı (sert): olgunlaşmamış ürün taban ARPU'nun yalnız küçük bir
+    /// kısmını kazanır; olgunlukla 1'e çıkar. floor=0.12 → ham ürün ~%12 ARPU.
+    private var productArpuGate: Double {
+        Balance.productArpuFloor + (1 - Balance.productArpuFloor) * productReadiness
+    }
+    /// Ürün-olgunluğu churn kapısı: olgunlaşmamış üründe kullanıcılar hızla kaçar (ince ürün
+    /// → yüksek churn). penalty=1.6 → ham üründe churn ~2.6×; olgunlukla taban churn'e iner.
+    private var productChurnGate: Double {
+        1 + Balance.productChurnPenalty * (1 - productReadiness)
+    }
+
+    var churnRate: Double {
+        Balance.baseChurn * max(0.2, 1 - effects.churnReduce - opsPower * 0.01)
+            * (1 + overload) * productChurnGate
+    }
+
+    /// Kullanıcı başına aylık gelir (taban × evre çarpanı × modül + proje katkıları × satış gücü
+    /// × ürün-olgunluğu kapısı). Evre çarpanı: SaaS fiyatlandırma gücü/upsell modeller.
     var arpu: Double {
         Balance.baseArpu
             * Balance.arpuMultiplier(forStage: state.stage)
             * (1 + effects.arpuMult + projectArpuMult)
             * (1 + min(Balance.salesArpuCap, salesPower * Balance.salesArpuPerUnit))
+            * productArpuGate
     }
 
     var mrr: Double { state.users * arpu }
@@ -545,12 +571,13 @@ final class GameModel: ObservableObject {
         return 5
     }
 
-    /// En az atanmış geliştirme-aşamasındaki proje (otomatik dağılım için).
-    /// Tüm projeler ya yayında ya da boşsa nil — yeni üye proje atanmaz.
+    /// En az atanmış, henüz OLGUNLAŞMAMIŞ (devProgress < 1) proje (otomatik dağılım için).
+    /// Yayına girmiş ama hâlâ gelişen ürünler de dahil — yeni mühendis ürünü ilerletmeye
+    /// devam etsin. Tüm projeler tam olgunsa nil → yeni üye proje atanmaz.
     private func projectNeedingHelp() -> ProjectState? {
-        let inDev = state.projects.filter { !$0.isLive }
-        guard !inDev.isEmpty else { return nil }
-        return inDev.min(by: { teamSize(forProject: $0.id) < teamSize(forProject: $1.id) })
+        let buildable = state.projects.filter { $0.devProgress < 1 }
+        guard !buildable.isEmpty else { return nil }
+        return buildable.min(by: { teamSize(forProject: $0.id) < teamSize(forProject: $1.id) })
     }
 
     @discardableResult
@@ -1379,7 +1406,8 @@ final class GameModel: ObservableObject {
             let cat = firstProject?.category ?? 0
             let name = firstProject?.name ?? (profile.companyName.isEmpty ? "MVP" : profile.companyName)
             let proj = ProjectState(name: name, category: cat,
-                                    startMonth: 0, devProgress: 1, isLive: true)
+                                    startMonth: 0,
+                                    devProgress: Balance.projectMVPThreshold, isLive: true)
             fresh.projects = [proj]
             // Kurucu üyesi: aynı kişi, aynı yeni proje üzerinde — kimlik korunur.
             let founderFirst = profile.founderFirstName.isEmpty ? "Kurucu" : profile.founderFirstName
@@ -1624,8 +1652,11 @@ final class GameModel: ObservableObject {
 
         let catIndex = min(max(0, firstProjectCategory), Balance.projectCategories.count - 1)
         let projName = clean(firstProjectName).isEmpty ? clean(company) : clean(firstProjectName)
+        // İlk ürün "yayında ama henüz ince MVP" doğar (devProgress = MVP eşiği): kazanç cılız
+        // başlar, oyuncu ekibi ürüne atayıp geliştirdikçe olgunlaşır ve geliri büyür.
         let firstProject = ProjectState(name: projName, category: catIndex,
-                                        startMonth: state.months, devProgress: 1, isLive: true)
+                                        startMonth: state.months,
+                                        devProgress: Balance.projectMVPThreshold, isLive: true)
         state.projects = [firstProject]
 
         // Kurucu = ilk üye: GameState init `headcount[0] = 1` ile başlar (kurucu mühendis);
@@ -1648,6 +1679,9 @@ final class GameModel: ObservableObject {
         state.normalize()   // headcount ile yeniden senkronla (her ihtimale karşı)
         // HZ-4: ilk oturum karşılaması — kuruluş biter bitmez sıcak, eğitici bir dokunuş.
         pendingToast = NarrativeContent.firstSessionWelcome
+        // Oyun DURAKLI başlar: oyuncu ▶ (kontrol dock) deyince zaman akar. Kuruluştan sonra
+        // sakin bir "hazırlan" anı; oyuncu önce ekibi/ürünü görür, sonra başlatır.
+        isPaused = true
         save()
     }
 
@@ -1682,16 +1716,44 @@ final class GameModel: ObservableObject {
         canStartNewProject && state.cash >= projectStartCost(category)
     }
 
-    /// Geliştirme hızı çarpanı: mühendislik gücü referansa göre projeleri hızlandırır.
-    private var projectBuildAccel: Double {
-        max(0.4, min(2.5, devPower / Balance.projectDevReference))
+    /// Bir üyenin departmanındaki kişi-başı çıktısı (atanan-ekiple proje inşa gücü için).
+    private func perHeadOutput(_ dept: Int) -> Double {
+        let hc = state.headcount[dept]
+        guard hc > 0 else { return 0 }
+        return deptOutput(dept) / Double(hc)
     }
 
-    /// Geliştirme aşamasındaki projenin kalan süresi (gerçek saniye) — ETA göstergesi.
+    /// Bir projeye ATANAN ekibin ürün-inşa gücü. Yalnız atanan üyeler sayılır; ürünü asıl
+    /// Mühendislik (d0) inşa eder, Ürün&Tasarım (d1) yarı katkı, diğer roller küçük katkı.
+    /// Kimse atanmazsa 0 → ürün ilerlemez (ekip yönetimi zorunlu — gerçek-hayat mantığı).
+    func projectBuildPower(_ project: ProjectState) -> Double {
+        let assigned = state.members.filter { $0.assignedProjectID == project.id }
+        guard !assigned.isEmpty else { return 0 }
+        return assigned.reduce(0) { acc, m in
+            let w: Double
+            switch m.deptIndex {
+            case 0:  w = 1.0    // Mühendislik
+            case 1:  w = 0.5    // Ürün & Tasarım
+            default: w = 0.15   // pazarlama/satış/ops ürünü doğrudan inşa etmez
+            }
+            return acc + perHeadOutput(m.deptIndex) * w
+        }
+    }
+
+    /// Geliştirme hızı çarpanı: ATANAN ekibin gücü referansa göre projeyi hızlandırır.
+    /// 0 olabilir (atama yoksa) → durur. Tavan 3× (kalabalık ekip aşırı hızlanmasın).
+    func projectBuildAccel(_ project: ProjectState) -> Double {
+        min(3.0, projectBuildPower(project) / Balance.projectDevReference)
+    }
+
+    /// Henüz olgunlaşmamış projenin MVP (yayın) eşiğine kalan süresi (gerçek saniye) — ETA.
+    /// Atanan ekip yoksa süresiz (.infinity) → UI "ekip ata" yönlendirir.
     func projectETASeconds(_ project: ProjectState) -> Double {
         guard !project.isLive, let cat = Balance.projectCategory(project.category) else { return 0 }
-        let remaining = max(0, 1 - project.devProgress)
-        let monthsLeft = remaining * max(0.5, cat.buildMonths) / max(0.0001, projectBuildAccel)
+        let accel = projectBuildAccel(project)
+        guard accel > 0 else { return .infinity }
+        let remaining = max(0, Balance.projectMVPThreshold - project.devProgress)
+        let monthsLeft = remaining * max(0.5, cat.buildMonths) / accel
         return monthsLeft * Balance.secondsPerMonth / max(0.0001, speed)
     }
 
@@ -1711,21 +1773,24 @@ final class GameModel: ObservableObject {
         return true
     }
 
-    /// Geliştirme aşamasındaki projeleri ilerlet; tamamlananları yayına al (kutlama).
-    /// `internal` görünürlük — @testable testler deterministik dev → live geçişini tetikleyebilsin.
+    /// Projeleri ATANAN ekiple ilerlet. Olgunluk (devProgress) MVP eşiğinde yayına geçirir
+    /// ama YAYINDAN SONRA da 1'e dek gelişmeye devam eder (ürün olgunlaştıkça gelir büyür).
+    /// `internal` görünürlük — @testable testler deterministik geçişi tetikleyebilsin.
     func advanceProjects(_ monthFraction: Double) {
-        guard state.projects.contains(where: { !$0.isLive }) else { return }
-        let accel = projectBuildAccel
-        for i in state.projects.indices where !state.projects[i].isLive {
+        guard state.projects.contains(where: { $0.devProgress < 1 }) else { return }
+        let mvp = Balance.projectMVPThreshold
+        for i in state.projects.indices where state.projects[i].devProgress < 1 {
+            let accel = projectBuildAccel(state.projects[i])
+            guard accel > 0 else { continue }   // atanan ekip yoksa ürün ilerlemez
             let cat = Balance.projectCategory(state.projects[i].category)
             let months = max(0.5, cat?.buildMonths ?? 2)
-            state.projects[i].devProgress += monthFraction * accel / months
-            if state.projects[i].devProgress >= 1 {
-                state.projects[i].devProgress = 1
+            state.projects[i].devProgress = min(1, state.projects[i].devProgress + monthFraction * accel / months)
+            // MVP eşiğini İLK kez geçince yayına gir (bir kerelik kutlama + moral/itibar).
+            if !state.projects[i].isLive && state.projects[i].devProgress >= mvp {
                 state.projects[i].isLive = true
                 state.morale = min(100, state.morale + Balance.projectLaunchMoraleBonus)
                 state.reputation = min(100, state.reputation + Balance.projectLaunchReputationBonus)
-                pendingToast = "\(state.projects[i].name) yayında! Büyümeye katkı sağlıyor."
+                pendingToast = "\(state.projects[i].name) yayında! Geliştirdikçe geliri büyür."
             }
         }
     }

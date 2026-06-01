@@ -32,8 +32,7 @@ struct SettingsView: View {
                         toggleRow("Titreşim", icon: "iphone.radiowaves.left.and.right", isOn: $hapticsOn)
                     }
                     section("OYUN") {
-                        currencyRow
-                        divider
+                        // Para birimi seçici şimdilik kapalı — yalnızca dolar (kullanıcı isteği).
                         toggleRow("Bildirimler", icon: "bell.fill", isOn: $notifsOn)
                     }
                     section("HESAP") {
@@ -131,27 +130,6 @@ struct SettingsView: View {
             Toggle("", isOn: isOn).labelsHidden().tint(theme.accent)
         }
         .padding(.horizontal, Space.s3).padding(.vertical, Space.s3)
-    }
-
-    private var currencyRow: some View {
-        HStack(spacing: Space.s3) {
-            iconBadge("turkishlirasign.circle.fill")
-            Text("Para birimi").font(.bodyText).foregroundStyle(theme.text)
-            Spacer()
-            HStack(spacing: 4) {
-                ForEach(Currency.allCases, id: \.self) { c in
-                    Button { Haptics.tap(); model.setCurrency(c) } label: {
-                        Text(c.symbol).font(.appText(13, .bold))
-                            .frame(width: 32, height: 30)
-                            .background(model.currency == c ? theme.accent : theme.surfaceHigh,
-                                        in: RoundedRectangle(cornerRadius: Radius.s))
-                            .foregroundStyle(model.currency == c ? .white : theme.subtle)
-                    }
-                    .buttonStyle(.pressable)
-                }
-            }
-        }
-        .padding(.horizontal, Space.s3).padding(.vertical, Space.s2)
     }
 
     private var resetRow: some View {

@@ -65,14 +65,15 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            theme.bg.ignoresSafeArea()
-
-            // Ana içerik: HUD + sekme paneli.
+            // Ana içerik: HUD + sekme paneli. (Zemin/aurora artık sibling DEĞİL → .background;
+            // böylece bu ZStack üst safe-area'ya saygı duyar, HUD Dynamic Island'ın ALTINDA
+            // başlar. Eskiden ignoresSafeArea'lı bg sibling'ı tüm ZStack'i safe-area dışına
+            // taşırıp HUD'u island ile çakıştırıyordu.)
             VStack(spacing: 0) {
-                HUDView(model: model, theme: theme, soundEnabled: $soundEnabled,
-                        settingsOpen: $settingsOpen, lessonsOpen: $lessonsOpen)
+                HUDView(model: model, theme: theme)
                     .padding(.horizontal, Space.s3)
-                    .padding(.top, Space.s2)
+                    // Dynamic Island'a nefes payı: kart safe-area dibinde adayla öpüşmesin.
+                    .padding(.top, Space.s4)
                     .padding(.bottom, Space.s2)
                     .offset(y: introAppeared ? 0 : -40)
                     .opacity(introAppeared ? 1 : 0)
@@ -118,13 +119,41 @@ struct ContentView: View {
 
             timeStateOverlay
         }
-        // Alt sticky chunky tab bar — vertical mobil oyun standart düzeni.
+        // Zemin + üst aurora: safe-area'yı YOK SAYAN bir arka plan katmanı. İçerik (yukarıdaki
+        // ZStack) safe-area'ya saygı duyarken, renk/aurora status bar + Dynamic Island'ın
+        // arkasına kadar dolar → safe-area'nın markalı, evre-duyarlı kullanımı.
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                theme.bg
+                topSafeAreaAurora
+            }
+            .ignoresSafeArea()
+        }
+        // Alt sticky çubuk: yatay kontrol dock'u (oynat/hız/sezon/defter/ayar) + chunky tab
+        // bar. Dock eskiden HUD'un sağ-üst köşesinde dikey sıkışıktı; kullanıcı isteğiyle baş
+        // parmağa yakın, menünün hemen üstüne taşındı.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            bottomTabBar
-                .offset(y: introAppeared ? 0 : 60)
-                .opacity(introAppeared ? 1 : 0)
-                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.18),
-                           value: introAppeared)
+            // Birleşik alt "kontrol kuşağı": dock + tab bar tek frosted zemin üstünde,
+            // üstte ince hairline ile kayan içerikten net ayrışır → dock artık içerikle
+            // karışmaz, belirgin chrome bölgesi (kullanıcı geri bildirimi).
+            VStack(spacing: 0) {
+                ControlDockView(model: model, theme: theme,
+                                settingsOpen: $settingsOpen, lessonsOpen: $lessonsOpen)
+                    .padding(.horizontal, Space.s4)
+                    .padding(.top, Space.s3)
+                    .padding(.bottom, Space.s2)
+                    .offset(y: introAppeared ? 0 : 50)
+                    .opacity(introAppeared ? 1 : 0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.14),
+                               value: introAppeared)
+                bottomTabBar
+                    .offset(y: introAppeared ? 0 : 60)
+                    .opacity(introAppeared ? 1 : 0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.18),
+                               value: introAppeared)
+            }
+            .background(.ultraThinMaterial)
+            .overlay(Rectangle().fill(theme.hairline).frame(height: 1), alignment: .top)
         }
         // Modal popup'lar tab bar'ın DA ÜSTÜNde, TAM EKRAN — yoksa uzun kartlar tab bar
         // arkasında kalıp aksiyon butonu erişilemiyordu. overlay tüm frame'i (inset dahil) kaplar.
@@ -197,6 +226,23 @@ struct ContentView: View {
         }
     }
 
+    /// Üst safe-area (status bar) görsel kullanımı: accent renkli yumuşak aurora — status
+    /// bar'ın arkasına taşar, içerikle çakışmaz (allowsHitTesting=false). Evre arttıkça
+    /// accent zenginleşir → "oyun evreyle güzelleşir" temasıyla tutarlı. Sade dark UI'a
+    /// uygun düşük opaklık; düz siyah boşluk yerine markalı bir komuta başlığı hissi.
+    private var topSafeAreaAurora: some View {
+        LinearGradient(
+            colors: [theme.accent.opacity(0.22),
+                     theme.accent.opacity(0.07),
+                     .clear],
+            startPoint: .top, endPoint: .bottom
+        )
+        .frame(height: 210)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(edges: .top)
+        .allowsHitTesting(false)
+    }
+
     private func showToast(_ text: String, urgent: Bool) {
         toastToken += 1
         let t = toastToken
@@ -245,10 +291,10 @@ struct ContentView: View {
             }
         }
         .padding(.horizontal, Space.s2)
-        .padding(.top, Space.s2)
+        .padding(.top, Space.s1)
         .padding(.bottom, Space.s1)
-        .background(.ultraThinMaterial)
-        .overlay(Rectangle().fill(theme.hairline).frame(height: 1), alignment: .top)
+        // Zemin/hairline artık birleşik kontrol kuşağında (safeAreaInset) — tab bar kendi
+        // materyalini taşımıyor, dock ile tek frosted yüzeyi paylaşır.
     }
 
     private func tabPill(_ t: GameTab) -> some View {
@@ -288,51 +334,22 @@ struct ContentView: View {
     }
 
     /// Simülasyon zaman-durumu görsel geri-bildirimi: oyuncu duraklatma/hız değişimini
-    /// EKRANDA net görsün diye. Duraklatma → amber kenar çerçeve + yumuşak scrim + alt
-    /// "Duraklatıldı" bandı (dokununca devam). Hızlı (2×/3×) → accent kenar çerçeve.
-    /// 1× & oynar durumda hiçbir şey gösterilmez. (Modallar bunun ÜSTÜNDE kalır.)
+    /// EKRANDA net görsün diye. Trafik-ışığı algısı (kullanıcı isteği): DURAKLI → KIRMIZI
+    /// (dur) kalın kenar çerçeve. Hızlı (2×/3×) → accent çerçeve. 1× & oynar durumda hiçbir
+    /// şey gösterilmez. İçerik üstü scrim YOK (kullanıcı isteği) — kırmızı yalnız kenarda;
+    /// ayrı "DURAKLATILDI" bandı da kaldırıldı (dock butonu durumu zaten taşıyor).
     @ViewBuilder private var timeStateOverlay: some View {
         let paused = model.isPaused
         let fast = model.speed > 1 && !paused
         ZStack {
-            // Duraklatınca hafif scrim — "donmuş" hissi (tıklamayı engellemez).
-            if paused {
-                Palette.warning.opacity(0.05)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-            }
-            // Ekran kenarı durum çerçevesi (kayıt-modu kırmızı çerçeve mantığı).
+            // Ekran kenarı durum çerçevesi: duraklı → kırmızı & bir tık kalın, hızlı → accent.
             if paused || fast {
                 Rectangle()
-                    .strokeBorder(paused ? Palette.warning : theme.accent,
-                                  lineWidth: 2.5)
-                    .opacity(paused ? 0.85 : 0.5)
+                    .strokeBorder(paused ? Palette.danger : theme.accent,
+                                  lineWidth: paused ? 4 : 2.5)
+                    .opacity(paused ? 0.9 : 0.5)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
-            }
-            // Duraklatma bandı — alt-merkez, tab bar üstünde, dokununca devam.
-            if paused {
-                VStack {
-                    Spacer()
-                    Button { Haptics.selection(); model.togglePause() } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: "pause.fill")
-                                .font(.system(size: 12, weight: .bold))
-                            Text("DURAKLATILDI")
-                                .font(.eyebrow).kerning(1.2)
-                            Text("· devam için dokun")
-                                .font(.appText(11, .medium))
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, Space.s4).padding(.vertical, Space.s2 + 2)
-                        .background(Palette.warning.opacity(0.92), in: Capsule())
-                        .overlay(Capsule().stroke(.white.opacity(0.2), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
-                    }
-                    .buttonStyle(.pressable)
-                    .padding(.bottom, Space.s4)
-                }
             }
         }
         .animation(Motion.snappy, value: paused)

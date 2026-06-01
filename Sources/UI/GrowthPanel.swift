@@ -50,6 +50,8 @@ struct GrowthPanel: View {
                         .contentTransition(.numericText())
                 }
 
+                productMaturityNote
+
                 // Ana ikili (− / +) geniş; +×5 / Sıfırla daha küçük ikincil.
                 HStack(spacing: Space.s2) {
                     stepButton("−", color: Palette.danger, flex: 1.3) {
@@ -73,6 +75,26 @@ struct GrowthPanel: View {
                     projectedStat("CAC (edinme maliyeti)", BigNumber.currency.symbol + String(format: "%.2f", model.currentCAC), theme.accent)
                 }
             }
+        }
+    }
+
+    /// Ürün olgun değilken pazarlamanın boşa gideceğini açıkça anlatan uyarı (sert gelir
+    /// kapısı oyuncuya görünür olsun — "neden MRR gelmiyor" şaşkınlığını önler).
+    @ViewBuilder private var productMaturityNote: some View {
+        let r = model.productReadiness
+        if r < 0.6 {
+            HStack(alignment: .top, spacing: Space.s2) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text("Ürün henüz olgun değil (%\(Int(r * 100))). Pazarlama büyük ölçüde boşa gider — önce Ofis › Projeler'den ekibi ürüne atayıp özellikleri geliştir.")
+                    .font(.appText(11, .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+            }
+            .foregroundStyle(Palette.warning)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Space.s2)
+            .background(Palette.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: Radius.s))
         }
     }
 

@@ -208,7 +208,12 @@ final class CompanyProjectsTests: XCTestCase {
         XCTAssertEqual(model.liveProjectCount, 1)
         XCTAssertFalse(model.projects.last?.isLive ?? true)
 
-        // Cömertçe büyük bir monthFraction → devProgress kesinlikle 1'i aşar.
+        // İnşa artık ATANAN ekiple sürer → P2'ye kurucuyu (mühendis) ata.
+        let p2 = model.projects.last!
+        if let founder = model.members.first(where: { $0.isFounder }) {
+            model.assign(memberID: founder.id, toProject: p2.id)
+        }
+        // Cömertçe büyük bir monthFraction → devProgress kesinlikle 1'i aşar (clamp 1.0).
         model.advanceProjects(20)
 
         XCTAssertEqual(model.liveProjectCount, 2, "İkinci proje yayına geçmeli")
@@ -222,12 +227,16 @@ final class CompanyProjectsTests: XCTestCase {
         model.completeCompanySetup(firstName: "A", lastName: "B", company: "C",
                                    sector: 0, firstProjectName: "P1", firstProjectCategory: 0)
         _ = model.startProject(name: "P2", category: 0)
+        let p2 = model.projects.last!
+        if let founder = model.members.first(where: { $0.isFounder }) {
+            model.assign(memberID: founder.id, toProject: p2.id)
+        }
 
-        // Çok küçük monthFraction → ilerlemeli ama yayına ALMAMALI.
+        // Çok küçük monthFraction → ilerlemeli ama MVP eşiğine (yayına) ALMAMALI.
         model.advanceProjects(0.05)
         let p = model.projects.last!
         XCTAssertGreaterThan(p.devProgress, 0)
-        XCTAssertLessThan(p.devProgress, 1.0)
+        XCTAssertLessThan(p.devProgress, Balance.projectMVPThreshold)
         XCTAssertFalse(p.isLive)
         XCTAssertEqual(model.liveProjectCount, 1)
     }
@@ -256,11 +265,75 @@ final class CompanyProjectsTests: XCTestCase {
                                    sector: 0, firstProjectName: "P1", firstProjectCategory: 0)
         let valOne = model.valuation
         _ = model.startProject(name: "P2", category: 0)
-        model.advanceProjects(20)   // P2 yayına gir
+        let p2 = model.projects.last!
+        if let founder = model.members.first(where: { $0.isFounder }) {
+            model.assign(memberID: founder.id, toProject: p2.id)
+        }
+        model.advanceProjects(20)   // atanan ekiple P2 yayına gir
         XCTAssertEqual(model.liveProjectCount, 2)
         let valTwo = model.valuation
         XCTAssertGreaterThanOrEqual(valTwo - valOne, Balance.projectValuationEach * 0.9,
                                     "İkinci canlı proje değerlemeye ~projectValuationEach katmalı")
+    }
+
+    // MARK: Ürün-olgunluğu gelir kapısı + atanan-ekiple inşa
+
+    /// Olgun ürün (devProgress=1) ham ürüne (MVP eşiği) göre daha yüksek ARPU + daha düşük
+    /// churn vermeli — pazarlamanın kalıcı gelire dönmesi ürün olgunluğuna kapılı (SERT).
+    @MainActor
+    func testProductMaturityGatesArpuAndChurn() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "A", lastName: "B", company: "C",
+                                   sector: 0, firstProjectName: "P1", firstProjectCategory: 0)
+        // Ham ürün (devProgress = MVP eşiği) — kurucu zaten ilk projeye atanmış.
+        XCTAssertEqual(model.productReadiness, Balance.projectMVPThreshold, accuracy: 0.001)
+        let arpuRaw = model.arpu
+        let churnRaw = model.churnRate
+
+        // Ürünü olgunlaştır (atanan kurucuyla inşa et).
+        model.advanceProjects(50)
+        XCTAssertEqual(model.projects.first?.devProgress ?? 0, 1.0, accuracy: 0.001)
+        XCTAssertEqual(model.productReadiness, 1.0, accuracy: 0.001)
+
+        XCTAssertGreaterThan(model.arpu, arpuRaw, "Olgun ürün daha yüksek ARPU kazanır")
+        XCTAssertLessThan(model.churnRate, churnRaw, "Olgun üründe churn düşer")
+    }
+
+    /// Atanan ekip yoksa ürün İLERLEMEZ (inşa atanan ekibe bağlı — gerçek-hayat mantığı).
+    @MainActor
+    func testProjectDoesNotAdvanceWithoutAssignedTeam() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "A", lastName: "B", company: "C",
+                                   sector: 0, firstProjectName: "P1", firstProjectCategory: 0)
+        // Kurucuyu projeden çıkar → hiç builder kalmaz.
+        if let founder = model.members.first(where: { $0.isFounder }) {
+            model.assign(memberID: founder.id, toProject: nil)
+        }
+        let before = model.projects.first?.devProgress ?? -1
+        model.advanceProjects(50)
+        XCTAssertEqual(model.projects.first?.devProgress, before,
+                       "Atanan ekip yokken devProgress ilerlememeli")
+    }
+
+    /// Atanan ekiple ürün MVP'den tam olgunluğa kadar gelişebilir.
+    @MainActor
+    func testAssignedTeamBuildsProductToMaturity() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "A", lastName: "B", company: "C",
+                                   sector: 0, firstProjectName: "P1", firstProjectCategory: 0)
+        XCTAssertGreaterThan(model.projectBuildPower(model.projects[0]), 0,
+                             "Kurucu atanmış → inşa gücü > 0")
+        model.advanceProjects(50)
+        XCTAssertEqual(model.projects.first?.devProgress ?? 0, 1.0, accuracy: 0.001)
+    }
+
+    /// Oyun kuruluştan sonra DURAKLI başlamalı (kullanıcı isteği) — oyuncu ▶ ile başlatır.
+    @MainActor
+    func testGameStartsPausedAfterSetup() {
+        let model = freshModel()
+        model.completeCompanySetup(firstName: "A", lastName: "B", company: "C",
+                                   sector: 0, firstProjectName: "P1", firstProjectCategory: 0)
+        XCTAssertTrue(model.isPaused, "Kuruluştan sonra oyun duraklı başlamalı")
     }
 
     // MARK: İflas sonrası kimlik koruma
