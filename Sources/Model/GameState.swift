@@ -56,6 +56,16 @@ struct GameState: Codable {
     // Codable + decodeIfPresent → eski save'ler çökmez, kill/relaunch kuyruk geri yüklenir.
     var pendingEffects: [PendingEffect] = []
 
+    // Tepki Veren Rakip (Eskalasyon / Antagonist). Pasif kohort artık oyuncu hızlı
+    // büyüdüğünde TEPKI verir; baskı bu 0..1 değeriyle temsil edilir ve her tick yumuşakça
+    // SOLAR (kalıcı değil). CAC/churn'e tavanlı çarpan enjekte eder + competitive karar kartını
+    // tetikler. Additive/decodeIfPresent → eski save'lerde yoksa 0 gelir (migration-proof).
+    var rivalAggression: Double = 0
+    /// Rakip tepkisinin MRR tetiklemesi için son ölçüm anlık görüntüsü (oransal sıçrama izlenir).
+    var rivalLastMRRSample: Double = 0
+    /// Aktif rakip hamlesinin sektör/tür bağlamı (feed + karar kartı kişiselleştirme). Boş = yok.
+    var rivalMoveLabel: String = ""
+
     // Zaman & istatistik
     var months: Double = 0             // şirket yaşı (oyun-ayı, kesirli)
     var celebratedUserMilestones: [Int] = []  // HZ-2: kutlanan kullanıcı eşikleri (bir kez)
@@ -236,6 +246,10 @@ struct GameState: Codable {
         detectedArchetype = g(.detectedArchetype, FounderArchetype.unknown.rawValue)
         feed = g(.feed, [FeedEntry]())
         feedUnread = g(.feedUnread, 0)
+        // Feature3 (Tepki Veren Rakip) — EN SON eklenir (çakışma/sıra kuralı).
+        rivalAggression = g(.rivalAggression, 0)
+        rivalLastMRRSample = g(.rivalLastMRRSample, 0)
+        rivalMoveLabel = g(.rivalMoveLabel, "")
     }
 
     mutating func normalize() {
@@ -321,6 +335,10 @@ struct GameState: Codable {
 
         // Şirket sağlık durum-makinesi — eski kayıt / bozuk veri için güvenli varsayılan.
         crisisChainCount = max(0, crisisChainCount)
+
+        // Tepki Veren Rakip — baskı 0..1 aralığına kilitle (bozuk/eski veri güvenliği).
+        rivalAggression = min(1, max(0, rivalAggression))
+        rivalLastMRRSample = max(0, rivalLastMRRSample)
 
         // Şirket profili: sektör katalog dışıysa güvenli tabana çek.
         if Balance.sector(profile.sector) == nil { profile.sector = 0 }

@@ -120,6 +120,7 @@ enum Icons {
             case "product":     return product
             case "market":      return market
             case "opportunity": return opportunity
+            case "competitive": return "bolt.shield.fill"
             default:            return "questionmark.circle"
             }
         }

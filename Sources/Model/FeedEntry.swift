@@ -39,7 +39,7 @@ struct FeedEntry: Codable, Identifiable, Equatable {
 
 /// Feed girdisinin görsel kimliği (ikon + nötr tint). rawValue Codable-stabil.
 enum FeedKind: Int, Codable {
-    case info = 0, quarter, sprint, daily, scenario, decision, delayed, milestone, season, offline, funding
+    case info = 0, quarter, sprint, daily, scenario, decision, delayed, milestone, season, offline, funding, rival
     var icon: String {
         switch self {
         case .info:      return "sparkles"
@@ -53,6 +53,7 @@ enum FeedKind: Int, Codable {
         case .season:    return "crown.fill"
         case .offline:   return "moon.zzz.fill"
         case .funding:   return "dollarsign.circle.fill"
+        case .rival:     return "bolt.shield.fill"
         }
     }
 }

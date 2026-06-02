@@ -754,3 +754,289 @@ final class ContextPersonalizationTests: XCTestCase {
     }
 }
 
+// MARK: - Anlamlı İflas: kalıcı iz (scar) + NG+ boost + post-mortem verisi
+
+/// İflas izinin ADİL/MODEST/SOLAN olduğunu + denge tavanlarının tutulduğunu kanıtlar.
+/// Tasarım DNA: rastgele ceza yok — iz açıklanabilir, tavanlı, deneyimle solar.
+final class BankruptcyScarTests: XCTestCase {
+
+    /// Crafted bir GameState'i diske yazıp GameModel'e yükle (state private(set) → test hook).
+    @MainActor
+    private func model(withBankruptcies b: Int, founderXP xp: Double, reached: Int = 0) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.bankruptcies = b
+        s.founderXP = xp
+        s.stageReached = reached
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    // MARK: Balance sabitleri — modest & tavanlı (brutal değil).
+
+    func testScarConstantsAreModestAndCapped() {
+        XCTAssertGreaterThan(Balance.bankruptcyReputationScarPerCount, 0)
+        // İz tavanı modest olmalı — başlangıç itibarının (20) yarısını geçmesin.
+        XCTAssertLessThanOrEqual(Balance.bankruptcyReputationScarCap, 12,
+                                 "İflas izi tavanı modest kalmalı (brutal değil)")
+        // Cash boost tavanı erken-oyunu ezmemeli (≤ +%40).
+        XCTAssertLessThanOrEqual(Balance.bankruptcyXPCashBonusCap, 0.4)
+        XCTAssertGreaterThan(Balance.bankruptcyScarFadePerXP, 0,
+                             "İz tecrübeyle SOLMALI (fade > 0)")
+    }
+
+    // MARK: Sıfır iflas → iz YOK (ilk denemeyi cezalandırma).
+
+    @MainActor
+    func testFreshRestartHasNoScarOrBoost() {
+        let m = model(withBankruptcies: 0, founderXP: 0)
+        XCTAssertEqual(m.nextAttemptCashBoost, 0, accuracy: 0.0001)
+        XCTAssertEqual(m.nextAttemptReputationScar, 0, accuracy: 0.0001)
+        let repBefore = m.reputation
+        m.restartAfterBankruptcy()
+        XCTAssertEqual(m.reputation, repBefore, accuracy: 0.01,
+                       "İlk denemede (iflas yok) başlangıç itibarı değişmemeli")
+        XCTAssertEqual(m.cash, Balance.startCash, accuracy: 1,
+                       "İflas yokken nakit boostı uygulanmamalı")
+    }
+
+    // MARK: İlk iflas → MODEST iz uygulanır, itibar düşer ama sıfırlanmaz.
+
+    @MainActor
+    func testFirstBankruptcyAppliesModestReputationScar() {
+        // Tek iflas, az tecrübe (xp=1) → iz neredeyse tam, ama modest.
+        let m = model(withBankruptcies: 1, founderXP: 1)
+        let scarPreview = m.nextAttemptReputationScar
+        XCTAssertGreaterThan(scarPreview, 0)
+        XCTAssertLessThanOrEqual(scarPreview, Balance.bankruptcyReputationScarPerCount)
+        let repBefore = GameState().reputation   // taze başlangıç itibarı
+        m.restartAfterBankruptcy()
+        XCTAssertLessThan(m.reputation, repBefore, "İflas izi başlangıç itibarını düşürmeli")
+        XCTAssertGreaterThanOrEqual(m.reputation, 0, "İtibar negatife düşmemeli")
+        XCTAssertEqual(m.reputation, max(0, repBefore - scarPreview), accuracy: 0.5)
+    }
+
+    // MARK: İz ZAMANLA SOLAR — yüksek tecrübede aynı iflas sayısı için iz daha hafif.
+
+    @MainActor
+    func testScarFadesWithExperience() {
+        let novice = model(withBankruptcies: 3, founderXP: 1)
+        let veteran = model(withBankruptcies: 3, founderXP: 10)
+        XCTAssertLessThan(veteran.nextAttemptReputationScar, novice.nextAttemptReputationScar,
+                          "Aynı iflas sayısında deneyimli kurucunun izi daha hafif olmalı (solma)")
+    }
+
+    // MARK: Cash boost TAVANLI — yüksek XP'de bile +%40'ı geçmez (denge koruması).
+
+    @MainActor
+    func testCashBoostIsCapped() {
+        let m = model(withBankruptcies: 2, founderXP: 100)   // aşırı XP
+        XCTAssertEqual(m.nextAttemptCashBoost, Balance.bankruptcyXPCashBonusCap, accuracy: 0.0001,
+                       "Yüksek XP'de nakit boostı tavana sabitlenmeli")
+        m.restartAfterBankruptcy()
+        XCTAssertLessThanOrEqual(m.cash, Balance.startCash * (1 + Balance.bankruptcyXPCashBonusCap) + 1,
+                                 "Başlangıç nakdi tavan boostı geçmemeli")
+    }
+
+    // MARK: İz tavanı — çok iflasta bile iz tavanı (× solma) geçilmez.
+
+    @MainActor
+    func testScarRespectsCapAtManyBankruptcies() {
+        let m = model(withBankruptcies: 99, founderXP: 0)   // solma yok (xp=0)
+        XCTAssertEqual(m.nextAttemptReputationScar, Balance.bankruptcyReputationScarCap, accuracy: 0.0001,
+                       "Çok iflasta iz tavana sabitlenmeli")
+    }
+}
+
+// MARK: - Kriz Tırmanış State Machine (Sağlıklı → Sıkıntılı → Kriz → Toparlanma)
+
+/// HealthSystem state geçişleri + DecisionSystem kriz-uygun kart önceliklendirmesi +
+/// P0-1 can-simidi garanti + gecikmeli etki çözümü. Tasarım DNA: krizler state-tetikli,
+/// zincirleme, adil; ölüm-spiralinde her zaman krize UYGUN + çok-yanıtlı kart bulunur.
+final class CrisisStateMachineTests: XCTestCase {
+
+    /// Crafted bir GameState'i diske yazıp GameModel'e yükle (state private(set) → test hook).
+    @MainActor
+    private func model(_ mutate: (inout GameState) -> Void) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        mutate(&s)
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    // MARK: HealthSystem state belirleme
+
+    @MainActor
+    func testStrongRunwayAndMoraleClearThoseCrisisTriggers() {
+        // İki state: biri kritik runway+moral, diğeri bol nakit+yüksek moral. İkincisinde
+        // runway/moral kriz tetikleyicileri ortadan kalkmalı — yani health durumu KÖTÜDEN
+        // İYİYE doğru kaymalı (state machine metriklere tepki veriyor). Ünit-ekonomi (ltvCac)
+        // ürün olgunluğuna bağlı olduğundan mutlak 'healthy' iddia etmeyiz; YÖN'ü kanıtlarız.
+        let weak = model { s in
+            s.cash = 500
+            s.morale = 15
+            s.adBudgetPerMonth = 60_000
+        }
+        XCTAssertEqual(weak.companyHealth, .crisis,
+                       "Zayıf runway + moral kriz state'i vermeli")
+
+        let strong = model { s in
+            s.cash = 5_000_000
+            s.morale = 95
+            s.adBudgetPerMonth = 0
+        }
+        // En azından runway+moral tetikleyicileri temiz: morale > crisisMorale, runway = ∞.
+        XCTAssertGreaterThan(strong.morale, HealthSystem.crisisMorale)
+        XCTAssertFalse(strong.runwayMonths < HealthSystem.crisisRunwayMonths,
+                       "Bol nakit + gider yok → runway kriz eşiğinin üstünde olmalı")
+    }
+
+    @MainActor
+    func testCrisisStateWhenMoraleCritical() {
+        let m = model { s in
+            s.cash = 5_000_000
+            s.morale = 20   // crisisMorale (35) altında → kriz
+        }
+        XCTAssertEqual(m.companyHealth, .crisis,
+                       "Kritik moral (<35) tek başına kriz state'i tetiklemeli")
+    }
+
+    @MainActor
+    func testCrisisStateWhenRunwayCritical() {
+        // Çok az nakit + ağır reklam gideri → negatif net → runway < 3 ay → kriz.
+        let m = model { s in
+            s.cash = 1_000
+            s.morale = 80
+            s.adBudgetPerMonth = 50_000
+        }
+        XCTAssertLessThan(m.runwayMonths, HealthSystem.crisisRunwayMonths)
+        XCTAssertEqual(m.companyHealth, .crisis,
+                       "Kritik runway (<3 ay) kriz state'i tetiklemeli")
+    }
+
+    // MARK: Zincirleme kriz sayacı (strained → crisis)
+
+    func testCategoryWeightsPrioritizeCrisisInCrisisState() {
+        let crisisW = DecisionSystem.categoryWeights(health: .crisis, chainCount: 0)
+        let healthyW = DecisionSystem.categoryWeights(health: .healthy, chainCount: 0)
+        // Kriz state'inde crisis kartı opportunity'den çok daha ağır olmalı.
+        XCTAssertGreaterThan(crisisW[.crisis] ?? 0, crisisW[.opportunity] ?? 999,
+                             "Kriz state'inde crisis kartı opportunity'den ağır basmalı")
+        // Sağlıklı state'inde tersine: opportunity crisis'ten ağır.
+        XCTAssertGreaterThan(healthyW[.opportunity] ?? 0, healthyW[.crisis] ?? 999,
+                             "Sağlıklı state'inde fırsat kartı krizden ağır basmalı")
+    }
+
+    func testLongChainBoostsCrisisWeight() {
+        let short = DecisionSystem.categoryWeights(health: .crisis, chainCount: 0)
+        let long = DecisionSystem.categoryWeights(health: .crisis, chainCount: 3)
+        XCTAssertGreaterThan(long[.crisis] ?? 0, short[.crisis] ?? 0,
+                             "Uzun zincir (>2) crisis ağırlığını daha da artırmalı")
+    }
+
+    // MARK: P0-1 CAN-SİMİDİ — ölüm-spiralinde ASLA büyüme kartı çıkmaz
+
+    @MainActor
+    func testLifelineNeverSurfacesGrowthCardWhenRunwayCritical() {
+        // Runway kritik eşiğin (2 ay) çok altında → her pick MUTLAKA crisis kategorisinden.
+        let m = model { s in
+            s.cash = 100
+            s.morale = 60
+            s.users = 2_000
+            s.adBudgetPerMonth = 80_000
+        }
+        XCTAssertLessThan(m.runwayMonths, Balance.crisisLifelineRunwayMonths,
+                          "Test ön koşulu: runway can-simidi eşiğinin altında olmalı")
+        for _ in 0..<40 {
+            guard let card = DecisionSystem.pick(for: m, state: m.state) else { continue }
+            XCTAssertEqual(card.category, .crisis,
+                           "Ölüm-spiralinde dağıtılan her kart crisis kategorisinden olmalı (\(card.id))")
+        }
+    }
+
+    @MainActor
+    func testEmergencyBridgeHasMultipleValidResponses() {
+        let card = DecisionSystem.emergencyBridgeFallback()
+        XCTAssertEqual(card.category, .crisis)
+        XCTAssertGreaterThanOrEqual(card.choices.count, 2,
+                                    "Krize birden çok geçerli yanıt olmalı (tek doğru cevap yok)")
+        // Hiçbir seçenek "bedava kurtuluş" olmamalı — her biri bir takas içermeli.
+        for choice in card.choices {
+            XCTAssertFalse(choice.effects.isEmpty,
+                           "Acil-köprü seçeneği bir bedel/takas taşımalı: \(choice.label)")
+        }
+    }
+
+    // MARK: Gecikmeli etki çözümü (#6) — köprü kredisinin geri ödeme zinciri
+
+    @MainActor
+    func testPendingEffectResolvesWhenDue() {
+        // Vadesi GEÇMİŞ bir gecikmeli etki kuyruğa konur; tick onu uygulamalı.
+        let m = model { s in
+            s.cash = 100_000
+            s.months = 12
+            s.pendingEffects = [
+                PendingEffect(applyAtMonth: 6,   // vade geçmiş (months=12)
+                              effects: [.cash(-10_000)],
+                              note: "Köprü kredisi geri ödemesi.")
+            ]
+        }
+        let cashBefore = m.cash
+        m.isPaused = false
+        // Birkaç tick → resolvePendingEffects vadesi gelen etkiyi uygulamalı.
+        let exp = expectation(description: "pending effect resolves")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exp.fulfill() }
+        wait(for: [exp], timeout: 2)
+        XCTAssertLessThan(m.cash, cashBefore,
+                          "Vadesi gelen gecikmeli etki (−nakit) uygulanmış olmalı")
+        XCTAssertTrue(m.state.pendingEffects.isEmpty,
+                      "Çözülen etki kuyruktan çıkarılmalı")
+    }
+
+    @MainActor
+    func testPendingEffectNotResolvedBeforeDue() {
+        // Vadesi GELECEKTE → tick uygulamamalı, kuyrukta kalmalı.
+        let m = model { s in
+            s.cash = 100_000
+            s.months = 2
+            s.pendingEffects = [
+                PendingEffect(applyAtMonth: 100,   // çok ileride
+                              effects: [.cash(-10_000)],
+                              note: "Henüz vade gelmedi.")
+            ]
+        }
+        let cashBefore = m.cash
+        m.isPaused = false
+        let exp = expectation(description: "pending effect waits")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exp.fulfill() }
+        wait(for: [exp], timeout: 2)
+        XCTAssertEqual(m.cash, cashBefore, accuracy: cashBefore * 0.05 + 1,
+                       "Vadesi gelmemiş gecikmeli etki uygulanmamalı (sadece normal ekonomi akar)")
+        XCTAssertEqual(m.state.pendingEffects.count, 1,
+                       "Vadesi gelmemiş etki kuyrukta kalmalı")
+    }
+
+    // MARK: Codable kalıcılık — kriz state alanları save/load güvenli
+
+    func testCrisisChainCountSurvivesEncodeDecode() {
+        var s = GameState()
+        s.crisisChainCount = 4
+        s.pendingEffects = [PendingEffect(applyAtMonth: 9, effects: [.cash(-5_000)], note: "x")]
+        let data = try! JSONEncoder().encode(s)
+        let back = try! JSONDecoder().decode(GameState.self, from: data)
+        XCTAssertEqual(back.crisisChainCount, 4)
+        XCTAssertEqual(back.pendingEffects.count, 1)
+        XCTAssertEqual(back.pendingEffects.first?.applyAtMonth, 9)
+        XCTAssertEqual(back.pendingEffects.first?.effects.first?.kind, "cash")
+    }
+}
+

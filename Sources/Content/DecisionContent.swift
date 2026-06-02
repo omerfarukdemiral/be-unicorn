@@ -218,6 +218,38 @@ enum DecisionContent {
                       result: "Süre kazandın. (Zamanı satın aldın, ama hak satın almadın; politika değişimi ya yararına ya aleyhine; kontrolün yok.)")
             ]),
 
+        // Zincirleme kriz: düşük moral → kilit kişi istifa eşiğinde (state-tetikli, çok-yanıtlı).
+        DecisionCard("retention-risk", category: .crisis, speaker: "İK", icon: "🪫",
+            prompt: "Moral düştü ve kilit bir ekip üyesi istifa sinyali veriyor. Gidişi diğerlerini de tetikleyebilir. Nasıl tutarsın?",
+            trigger: .lowMorale(40),
+            choices: [
+                .init("Birebir konuş, yol haritası + sahiplik ver", detail: "+moral / −kurucu zamanı, nakit yok",
+                      effects: [.morale(7), .reputation(1)],
+                      result: "İçten konuşma tuttu. (İnsanlar maaştan önce anlam ve özerklik için kalır; en ucuz retention aracı dürüst diyalogtur.)"),
+                .init("Acil zam + bonus", detail: "+moral hemen / burn artar + ücret çapası",
+                      effects: [.cash(-9_000), .morale(5), .moraleTargetBonus(-1)],
+                      result: "Para tuttu... şimdilik. (Para ile alınan sadakat parayla geri alınır; çapayı yukarı taşıdın.)"),
+                .init("Bırak gitsin, içerden terfi ver", detail: "−kısa vade kapasite / +genç yeteneğe alan",
+                      effects: [.morale(-3), .reputation(-1)],
+                      result: "Zor ama temiz karar. (Herkesi tutmaya çalışmak da bir maliyettir; bazen ayrılık ekibe büyüme alanı açar.)")
+            ]),
+
+        // Zincirleme kriz: kötü çeyrek sonrası yatırımcı sertleşir — bir sonraki tur koşulları kötü.
+        DecisionCard("investor-hardball", category: .crisis, speaker: "Yatırımcı", icon: "🧊",
+            prompt: "Son çeyrek zayıf geçti. Yatırımcı köprü turu için sert koşullar dayatıyor: düşük değerleme + ağır kontrol maddeleri.",
+            trigger: .lowRunwayMonths(4),
+            choices: [
+                .init("Koşulları kabul et, parayı al", detail: "+nakit / −%5 hisse + kontrol kaybı",
+                      effects: [.cash(35_000), .equity(-0.05), .morale(-2)],
+                      result: "Köprü kapandı, kontrol daraldı. (Zayıf pozisyonda toplanan tur en pahalı turdur — leverage karşı tarafta.)"),
+                .init("Reddet, gideri kısarak default-alive ol", detail: "−büyüme / +bağımsızlık, runway riski",
+                      effects: [.usersPercent(-0.05), .morale(-3), .reputation(2)],
+                      result: "Masadan kalktın. (Default-alive olmak pazarlık gücünü geri verir — ama runway biterse blöf pahalıya patlar.)"),
+                .init("Mevcut yatırımcılarla köprü ara", detail: "+ılımlı nakit / −%2 hisse, ilişkiye yaslan",
+                      effects: [.cash(18_000), .equity(-0.02), .reputation(-1)],
+                      result: "İçeriden köprü buldun. (Var olan yatırımcı ilişkisi krizde en hızlı sermayedir; ama her köprü cap table'ı inceltir.)")
+            ]),
+
         // MARK: - Takım
 
         DecisionCard("key-hire", category: .team, speaker: "İK", icon: "🌟",
@@ -964,6 +996,67 @@ enum DecisionContent {
                       result: "Kontrolü çapaladın. (Çift sınıf vizyonu kısa vadeli baskıdan korur; ama hesap verebilirliği zayıflatır — güç sorumlulukla dengelenmezse körlük getirir.)"),
                 .init("Tek sınıf, eşit oy", detail: "+yatırımcı güveni + yönetişim / kurucu daha kırılgan", effects: [.reputation(6), .equity(-0.02), .moraleTargetBonus(-1)],
                       result: "Eşit oy hakkı seçtin. (Tek sınıf piyasanın güvenini kazanır; ama aktivist yatırımcılar bir gün yön değiştirmeye zorlayabilir.)")
+            ]),
+
+        // MARK: - Tepki Veren Rakip (Eskalasyon / Antagonist) — competitive kategori
+        //
+        // Pasif kohort artık canlı: oyuncu hızlı büyüyünce kohorttan bir rakip TEPKI verir.
+        // Her kart birden çok GEÇERLİ yanıt taşır (tek doğru cevap yok). Etkiler GERÇEK, çoğu
+        // GECİKMELİ/zincirleme (anında değil). {{rival}}/{{rivalFounder}}/{{rivalProject}} ile
+        // kişiselleşir. Ekonomik baskı zaten state.rivalAggression üzerinden CAC/churn'e tavanlı
+        // işlemiştir; bu kartlar oyuncuya YANIT VERME ajansı verir (baskıyı yönetir, sıfırlamaz).
+
+        DecisionCard("rival-price-war", category: .competitive, speaker: "Pazarlama", icon: "⚔️",
+            prompt: "Rakip {{rival}} agresif bir fiyat savaşı başlattı — pazarda senin müşteri edinme maliyetin tırmanıyor. Tek doğru hamle yok; her yol bir bedel ister.",
+            trigger: .minStage(1),
+            choices: [
+                .init("Fiyatla değil değerle yarış — ürün derinliğine yatır", detail: "+farklılaşma / kısa vadede büyüme yavaşlar",
+                      effects: [.reputation(4), .morale(2)],
+                      result: "Fiyatla değil değerle yarıştın. (Fiyat savaşına fiyatla girmek dipsiz kuyudur; farklılaşma kalıcı savunmadır — ama meyvesi gecikmeli gelir.)",
+                      delayed: [DelayedEffect(delayMonths: 2, effects: [.usersPercent(0.04), .reputation(2)],
+                                              note: "{{rival}}'a karşı ürün farklılaşman tuttu — sadık kullanıcılar geri döndü. (Değer, fiyattan yavaş ama kalıcı kazanır.)")]),
+                .init("Karşı fiyat kır — pazarı savun", detail: "+kısa vadeli kullanıcı / geliri yorar, gecikmeli marj erozyonu",
+                      effects: [.usersPercent(0.05), .cash(-8_000), .morale(-1)],
+                      result: "Sen de fiyat kırdın, pazarı tuttun. (Pazar payını korudun ama marj erir; fiyat savaşı en çok nakdi derin olanı ödüllendirir.)",
+                      delayed: [DelayedEffect(delayMonths: 3, effects: [.cash(-6_000)],
+                                              note: "Fiyat savaşının marj erozyonu gecikmeli vurdu — düşük fiyatla gelen kullanıcı az kâr bıraktı.")]),
+                .init("Görmezden gel — kendi yoluna odaklan", detail: "0 maliyet / baskı bir süre daha sürebilir",
+                      effects: [.morale(1)],
+                      result: "Gürültüye kapılmadın. (Her rakip hamlesine tepki vermek dikkat dağıtır; bazen en iyi yanıt sabırdır — baskı kendiliğinden de sönecektir.)")
+            ]),
+
+        DecisionCard("rival-talent-raid", category: .competitive, speaker: "İK", icon: "🎯",
+            prompt: "{{rival}} senin ekibine göz dikti — {{rivalFounder}} cazip tekliflerle yetenek avlıyor. Moral sarsılıyor; nasıl karşılık vereceksin?",
+            trigger: .minStage(2),
+            choices: [
+                .init("Ekibi tut — maaş/kültür yatırımı", detail: "−nakit şimdi / +kalıcı moral, sadakat",
+                      effects: [.cash(-12_000), .morale(4), .moraleTargetBonus(1)],
+                      result: "Ekibine sahip çıktın. (İnsanlar paradan çok değer görmek ister; kültüre yatırım yetenek avına en sağlam kalkandır — ama bedeli peşin.)"),
+                .init("Bırak gitsinler — taze kan al", detail: "+yeni bakış / kısa vadeli boşluk + gecikmeli bilgi kaybı",
+                      effects: [.morale(-3), .reputation(-1), .headcount(dept: 0, delta: 1)],
+                      result: "Ayrılan ayrıldı, yenisini aldın. (Herkesi tutmak zorunda değilsin; ama deneyim kaybını gecikmeli hisset — yeni ekip ürünü öğrenene dek üretim aksar.)",
+                      delayed: [DelayedEffect(delayMonths: 2, effects: [.morale(-2)],
+                                              note: "{{rival}}'a giden kıdemli ekibin bıraktığı boşluk gecikmeli hissedildi — uyum süreci morali yordu.")]),
+                .init("Karşı teklif yap — kilit kişiyi koru", detail: "−nakit / +kilit kişi kalır, emsal riski",
+                      effects: [.cash(-7_000), .morale(2)],
+                      result: "Kilit kişiyi karşı teklifle tuttun. (Karşı teklif yangını söndürür; ama 'gitmekle tehdit edersen zam alırsın' emsali kurabilir — dikkatli kullan.)")
+            ]),
+
+        DecisionCard("rival-copycat-feature", category: .competitive, speaker: "Ürün", icon: "🪞",
+            prompt: "{{rival}}, {{rivalProject}} ile senin öne çıkan özelliğini neredeyse birebir kopyaladı. Kullanıcılar kıyaslıyor, churn baskısı artıyor.",
+            trigger: .minStage(2),
+            choices: [
+                .init("Daha hızlı yenile — bir adım önde kal", detail: "+ürün momentumu / ekip yükü artar, meyvesi gecikmeli",
+                      effects: [.reputation(5), .morale(-2)],
+                      result: "Kopyalanmayı hızla aşmakla yanıtladın. (Kopyalanmak liderliğin kanıtıdır; ama tek savunma sürekli yenilik temposudur — bu ekibi yorar.)",
+                      delayed: [DelayedEffect(delayMonths: 2, effects: [.usersPercent(0.05)],
+                                              note: "Hızlı yenileme {{rival}}'ın kopyasını geride bıraktı — kullanıcılar lider üründe kaldı.")]),
+                .init("Marka + topluluğa yatır", detail: "−nakit / +kalıcı sadakat, churn savunması",
+                      effects: [.cash(-9_000), .reputation(6), .moraleTargetBonus(1)],
+                      result: "Özelliği değil bağı savundun. (Özellik kopyalanır, topluluk kopyalanmaz; marka sadakati en derin churn kalkanıdır — ama yavaş inşa edilir.)"),
+                .init("Fiyat-değer dengesini öne çıkar", detail: "+net konumlandırma / kısa vadeli etki sınırlı",
+                      effects: [.users(80), .morale(1)],
+                      result: "Kopyaya karşı net konumlandırmayla çıktın. (Aynı özellik farklı değer vaadiyle ayrışabilir; mesaj nettse kopyalama silahsız kalır.)")
             ]),
 
     ]

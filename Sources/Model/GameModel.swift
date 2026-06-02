@@ -93,6 +93,11 @@ final class GameModel: ObservableObject {
     // (Persist edilmez; tick'te yeniden hesaplanır. Zincir sayacı GameState.crisisChainCount'ta tutulur.)
     private var lastHealth: CompanyHealth = .healthy
 
+    // Tepki Veren Rakip: oyuncu büyüme tetikleyicilerini izlemek için son anlık görüntüler
+    // (persist edilmez; tick'te güncellenir). Stage jump → baskı sıçraması; MRR surge → baskı.
+    private var lastRivalStage: Int = -1
+    private var rivalMRRWindow: Double = 0   // MRR tetik penceresi sayacı (oyun-ayı)
+
     init() {
         if let saved = SaveManager.load() {
             state = saved
@@ -112,6 +117,9 @@ final class GameModel: ObservableObject {
         // Şirket sağlık durum-makinesi: mevcut metriklerden ilk state'i tohumla
         // (önceki state olarak healthy — sahte geçiş tetiklenmesin).
         lastHealth = HealthSystem.evaluate(model: self, previous: .healthy)
+        // Tepki Veren Rakip: tetik referanslarını mevcut duruma tohumla (sahte sıçrama tetiklenmesin).
+        lastRivalStage = state.stage
+        if state.rivalLastMRRSample <= 0 { state.rivalLastMRRSample = mrr }
         // Test/QA: --force-decision launch arg'ı (veya FORCE_DECISION env var) ile
         // model init sırasında kartı hemen tetikle (state-tetikli kart dağılımını gözlem için).
         let env = ProcessInfo.processInfo.environment
@@ -399,8 +407,22 @@ final class GameModel: ObservableObject {
 
     var churnRate: Double {
         Balance.baseChurn * max(0.2, 1 - effects.churnReduce - opsPower * 0.01)
-            * (1 + overload) * productChurnGate
+            * (1 + overload) * productChurnGate * rivalChurnMultiplier
     }
+
+    // MARK: Tepki Veren Rakip — ekonomik baskı çarpanları (TAVANLI + GEÇİCİ)
+    //
+    // rivalAggression (0..1) her tick yumuşakça SOLAR. Tam baskıda bile etki TAVANLI:
+    // CAC en fazla ×(1+rivalCacPressureMax), churn en fazla ×(1+rivalChurnPressureMax).
+    // Böylece 4 arketip hâlâ Unicorn'a ulaşabilir (denge kısıdı). Çarpan ekonomi sözleşmesini
+    // (DecisionEffect/CodableEffect) değiştirmez — doğrudan computed property'ye enjekte edilir.
+
+    /// Fiyat savaşı baskısı: rakip agresifse CAC tırmanır (geçici, tavanlı).
+    var rivalCacMultiplier: Double { 1 + state.rivalAggression * Balance.rivalCacPressureMax }
+    /// Yetenek avı / kopya özellik baskısı: rakip agresifse churn tırmanır (geçici, tavanlı).
+    var rivalChurnMultiplier: Double { 1 + state.rivalAggression * Balance.rivalChurnPressureMax }
+    /// Rakip baskısının o anki şiddeti (0..1) — UI/teşhis okuması için.
+    var rivalAggression: Double { state.rivalAggression }
 
     /// Kullanıcı başına aylık gelir (taban × evre çarpanı × modül + proje katkıları × satış gücü
     /// × ürün-olgunluğu kapısı). Evre çarpanı: SaaS fiyatlandırma gücü/upsell modeller.
@@ -434,7 +456,8 @@ final class GameModel: ObservableObject {
         let stageMult = pow(Balance.cacStageScaling, Double(state.stage))
         let absorb = Balance.marketingAbsorption * (1 + marketingPower * 0.4)
         let saturation = 1 + state.adBudgetPerMonth / max(1, absorb)
-        return Balance.baseCAC * stageMult * saturation / qualityFactor
+        // Tepki Veren Rakip: fiyat savaşı baskısı CAC'i geçici/tavanlı yukarı çeker.
+        return Balance.baseCAC * stageMult * saturation / qualityFactor * rivalCacMultiplier
     }
 
     /// Reklam bütçesinin satın aldığı aylık yeni kullanıcı.
@@ -908,6 +931,73 @@ final class GameModel: ObservableObject {
             progress: quarterProgress, dt: dt)
     }
 
+    // MARK: Tepki Veren Rakip (Eskalasyon / Antagonist) — pasif kohort → canlı tehdit
+
+    /// Her tick çağrılır: rakip baskısını SOLDUR + oyuncu büyüme tetikleyicilerine TEPKI ver.
+    /// Sıra önemli: updateHealthState'ten ÖNCE çağrılmalı ki sağlık değerlendirmesi güncel
+    /// baskıyı (CAC/churn çarpanlarını) görsün (entegrasyon notu). Etkiler GEÇİCİ ve TAVANLI.
+    private func updateRivalAggression(_ monthFraction: Double) {
+        guard monthFraction > 0 else { return }
+        // 1) Doğal sönüm: baskı her ay üstel olarak solar (kalıcı ceza yok — geçici dalga).
+        let decay = pow(1 - Balance.rivalAggressionDecayPerMonth, monthFraction)
+        state.rivalAggression *= decay
+
+        // 2) Evre atlama tetikleyicisi: oyuncu yeni tura çıktıysa (büyük görünür başarı) →
+        //    kohort dikkatini çeker, bir rakip agresifleşir.
+        if lastRivalStage >= 0 && state.stage > lastRivalStage {
+            triggerRivalReaction(addAggression: Balance.rivalAggressionStageJump,
+                                 reason: .stageJump)
+        }
+        lastRivalStage = state.stage
+
+        // 3) Hızlı MRR büyümesi tetikleyicisi: bir tetik penceresi boyunca MRR eşiği aşan oranda
+        //    büyüdüyse rakip tepki verir. Pencere ~1 oyun-ayı; her pencerede bir kez değerlendir.
+        rivalMRRWindow += monthFraction
+        if rivalMRRWindow >= 1 {
+            rivalMRRWindow = 0
+            let base = max(1, state.rivalLastMRRSample)
+            let growth = (mrr - base) / base
+            if growth >= Balance.rivalMRRGrowthTriggerPct && mrr > 0 {
+                triggerRivalReaction(addAggression: Balance.rivalAggressionMRRSurge,
+                                     reason: .mrrSurge)
+            }
+            state.rivalLastMRRSample = mrr
+        }
+
+        state.rivalAggression = min(1, max(0, state.rivalAggression))
+    }
+
+    /// Rakip tepkisinin sebebi (feed/anlatı için).
+    private enum RivalReason { case stageJump, mrrSurge, promote }
+
+    /// Bir rakip hamlesini tetikle: baskıyı artır + AKIŞA bağlamlı bir olay düş (kişiselleştirilmiş).
+    /// Ekonomik etki rivalAggression üzerinden CAC/churn'e zaten tavanlı işler; bu yüzeyleme.
+    private func triggerRivalReaction(addAggression: Double, reason: RivalReason) {
+        let before = state.rivalAggression
+        state.rivalAggression = min(1, state.rivalAggression + addAggression)
+        // Aynı tick'te tekrar tekrar feed basmamak için: belirgin bir artış olduysa yüzeye çıkar.
+        guard state.rivalAggression - before >= 0.1 else { return }
+
+        // Aktif rakibi seç (en güçlü tehdit) — kişiselleştirme için.
+        let rival = state.cohortCompetitors.max(by: { $0.score < $1.score })
+        let rivalName = rival?.name ?? "Bir rakip"
+        let sectorName = (rival.flatMap { Balance.sector($0.sector)?.name }) ?? "teknoloji"
+        // Sektör/sebep → hamle türü (fiyat savaşı vs kopya/yetenek avı) anlatısı.
+        let move: String
+        switch reason {
+        case .stageJump:
+            move = "yeni turunu duydu ve \(sectorName) pazarında fiyat savaşı başlattı"
+        case .mrrSurge:
+            move = "hızlı büyümeni fark etti; agresif kullanıcı kapma kampanyasına geçti"
+        case .promote:
+            move = "seni ligde geçti görünce kopya özellik + yetenek avıyla karşılık veriyor"
+        }
+        state.rivalMoveLabel = "\(rivalName): \(move)"
+        pushFeed(.rival, "Rakip Tepki Verdi", "\(rivalName) \(move). Bir süre CAC ve churn baskısı artacak — karar kartıyla yanıt verebilirsin.",
+                 positive: false, mechanic: "marketing")
+        Feedback.warning()
+    }
+
     /// Çeyrek dolduysa kapanışı tetikle (overlay açılır, oyun mantığı duraklamaz).
     private func maybeCloseQuarter() {
         // Diğer modal'lar açıkken çeyrek kapanışını beklet (üst üste binmesin).
@@ -963,9 +1053,14 @@ final class GameModel: ObservableObject {
             state.morale = min(100, state.morale + Balance.promoteMoraleBonus)
             state.reputation = min(100, state.reputation + Balance.promoteReputationBonus)
             state.seasonPromotions += 1   // sezon finali özeti için terfi sayacı
+            // Tepki Veren Rakip: ligde öne geçtin → rakipler agresifleşir (kohort öne geçeni hedefler).
+            triggerRivalReaction(addAggression: Balance.rivalAggressionPromote, reason: .promote)
         case .demote:
             move = .demote
             state.leagueTier = max(0, state.leagueTier - 1)
+            // Tepki Veren Rakip: bir lig düştün → rakipler seni daha az tehdit görür, baskı sakinleşir
+            // (geri-dönüş kancası — DESIGN: kötü gidişatta nefes alanı).
+            state.rivalAggression *= (1 - Balance.rivalAggressionDemoteRelief)
         case .stay:
             move = .stay
         }
@@ -1514,6 +1609,20 @@ final class GameModel: ObservableObject {
 
     var isBankruptcyImminent: Bool { state.cash < 0 && runwayMonths < 0 }
 
+    // MARK: İflas izi — post-mortem'in ADİL/ŞEFFAF gösterimi için önizleme (salt okunur).
+    /// Sonraki denemenin başlangıç nakdi boost oranı (tavanlı). Örn 0.4 = +%40.
+    var nextAttemptCashBoost: Double {
+        min(Balance.bankruptcyXPCashBonusCap, state.founderXP * Balance.bankruptcyXPCashBonusPerXP)
+    }
+    /// Sonraki denemede başlangıç itibarından düşülecek iz puanı (modest, tecrübeyle solar).
+    /// Not: triggerBankruptcy SONRASI çağrılır → bankruptcies + founderXP zaten güncel.
+    var nextAttemptReputationScar: Double {
+        let raw = min(Balance.bankruptcyReputationScarCap,
+                      Double(state.bankruptcies) * Balance.bankruptcyReputationScarPerCount)
+        let fade = max(0, 1 - state.founderXP * Balance.bankruptcyScarFadePerXP)
+        return raw * fade
+    }
+
     private func checkBankruptcy() {
         if debtMonths > 2 || totalHeadcount == 0 {
             triggerBankruptcy()
@@ -1540,7 +1649,15 @@ final class GameModel: ObservableObject {
         fresh.founderXP = xp
         fresh.stageReached = reached
         fresh.bankruptcies = bankruptcies
-        fresh.cash = Balance.startCash * (1 + xp * 0.1)   // tecrübe = daha iyi başlangıç
+        // Tecrübe = daha iyi başlangıç nakdi — ama TAVAN'lı (erken-oyun koruması + denge).
+        let cashBoost = min(Balance.bankruptcyXPCashBonusCap, xp * Balance.bankruptcyXPCashBonusPerXP)
+        fresh.cash = Balance.startCash * (1 + cashBoost)
+        // İflas izi (scar): başlangıç itibarına MODEST, ZAMANLA SOLAN düşüş. Adil — açıkça gösterilir.
+        // İz = (iflas sayısı × puan, tavanlı) × (1 - tecrübe-solması). Öğrenen kurucu daha az "yanık" başlar.
+        let rawScar = min(Balance.bankruptcyReputationScarCap,
+                          Double(bankruptcies) * Balance.bankruptcyReputationScarPerCount)
+        let fade = max(0, 1 - xp * Balance.bankruptcyScarFadePerXP)
+        fresh.reputation = max(0, fresh.reputation - rawScar * fade)
         fresh.hasSeenOnboarding = true
         // Kimliği koru: kuruluşu tekrar istemeyiz; yeni şirket aynı kurucunun yeni denemesidir.
         fresh.profile = profile
@@ -1562,6 +1679,8 @@ final class GameModel: ObservableObject {
         state = fresh
         debtMonths = 0
         pendingBankruptcy = false
+        lastRivalStage = fresh.stage   // Tepki Veren Rakip: yeni denemede sahte stage-jump tetiklenmesin
+        rivalMRRWindow = 0
         seedCohortIfNeeded()   // yeni başlangıç ligine taze rakip kohort
         scheduleNextDecision()
         save()
@@ -1576,6 +1695,8 @@ final class GameModel: ObservableObject {
         fresh.profile.setupComplete = false   // → CompanySetupOverlay
         state = fresh
         debtMonths = 0
+        lastRivalStage = fresh.stage   // Tepki Veren Rakip: yeni kuruluşta sahte tetik olmasın
+        rivalMRRWindow = 0
         // Tüm bekleyen overlay'leri temizle (eski oyundan sarkmasın).
         pendingBankruptcy = false; pendingWin = false; pendingEvent = nil; pendingResult = nil
         pendingFundingStage = nil; pendingCycleReview = nil; pendingSeasonFinale = nil
@@ -1629,6 +1750,7 @@ final class GameModel: ObservableObject {
         state.quarterMoraleSamples += monthFraction
 
         advanceCohort(dt)   // canlı leaderboard: rakip skorları oyun temposuyla ilerler
+        updateRivalAggression(monthFraction) // Tepki Veren Rakip: baskıyı soldur + büyüme tetiklerine yanıt ver (health'ten ÖNCE)
         updateHealthState() // şirket sağlık durum-makinesi: state geçişlerini yakala (zincir izleme)
         checkCausalThresholds() // Faz 2: moral/runway eşik geçişinde "çünkü" çipi yay
         maybeCloseQuarter()

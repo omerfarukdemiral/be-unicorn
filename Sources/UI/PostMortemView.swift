@@ -29,8 +29,10 @@ struct PostMortemView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: Space.s4) {
                         header
+                        causalChainSection
                         miniCharts
                         diagnosticsSection
+                        decisionsSection
                         strategySection
                         statsFooter
                     }
@@ -74,6 +76,70 @@ struct PostMortemView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.bottom, Space.s1)
+    }
+
+    // MARK: - Zincirleme nedensellik — şirketi öldüren tek cümlelik nedensel zincir.
+    /// "Yüksek burn + düşük MRR → runway tükendi" gibi A→B→C akışı. Diagnostic'lerden FARKLI:
+    /// burada tek, en baskın ölüm-zinciri görselleştirilir (ok-akışı) — "neden battık" tek bakışta.
+
+    private var causalChainSection: some View {
+        VStack(alignment: .leading, spacing: Space.s2) {
+            HStack(spacing: Space.s2) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(penColor)
+                Text("ŞİRKETİ ÖLDÜREN ZİNCİR")
+                    .font(.caption).kerning(0.8)
+                    .foregroundStyle(penColor)
+            }
+            HStack(spacing: Space.s1) {
+                ForEach(Array(causalChain.enumerated()), id: \.offset) { idx, node in
+                    Text(node)
+                        .font(.appText(11, .bold))
+                        .foregroundStyle(theme.text)
+                        .padding(.horizontal, Space.s2).padding(.vertical, Space.s1)
+                        .background(penColor.opacity(0.12), in: Capsule())
+                        .fixedSize(horizontal: false, vertical: true)
+                    if idx < causalChain.count - 1 {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundStyle(penColor.opacity(0.7))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Space.s3)
+            .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+        }
+    }
+
+    /// En baskın 3 düğümlü ölüm-zinciri. Final state'ten en güçlü sinyali seç → kök neden → sonuç.
+    /// Her dal NET ve nedensel; tek doğru cevap dayatmaz, ne olduğunu gösterir.
+    private var causalChain: [String] {
+        let payroll = model.payrollPerMonth
+        let burn = payroll + model.opexPerMonth + model.adSpendPerMonth
+        let payrollShare = burn > 0 ? payroll / burn : 0
+        let mrr = model.mrr
+        let churn = model.churnRate
+        let ad = model.adSpendPerMonth
+        let ratio = model.ltvCacRatio
+
+        // Kök nedeni en güçlü sinyale göre seç (öncelik sırası).
+        if ad > 0 && (ratio > 0 && ratio < 2) && (mrr <= 1 || ad / max(1, mrr) >= 0.4) {
+            // Olgunlaşmamış ürüne aşırı pazarlama → churn sarmalı.
+            return ["Erken aşırı pazarlama", "Pahalı kullanıcı (LTV:CAC<2)", "Nakit eridi"]
+        }
+        if payrollShare >= 0.55 && burn > max(1, mrr) {
+            return ["Şişkin maaş gideri", "Burn > MRR", "Runway tükendi"]
+        }
+        if churn * 100 >= 7 {
+            return ["Yüksek churn", "Kullanıcı tutulamadı", "MRR düşüşe geçti"]
+        }
+        if model.morale < 35 {
+            return ["Moral çöktü", "İstifa zinciri", "Üretim düştü → gelir kurudu"]
+        }
+        // Genel: en yaygın startup ölümü — burn gelirin önünde kaldı.
+        return ["Yüksek burn", "Düşük MRR", "Runway tükendi"]
     }
 
     // MARK: - Son durumun mini grafikleri.
@@ -271,6 +337,17 @@ struct PostMortemView: View {
                 BigNumber.money(first), BigNumber.money(last)))
         }
 
+        // Kural 7: Rakip baskısı — Tepki Veren Rakip aktifken CAC/churn tırmandı, gelir yetişemedi.
+        // Eşik: iflas anında belirgin rakip baskısı (>= eşik) + zayıf ünit-ekonomi. ADİL: oyuncu
+        // bu baskının feed'de açık uyarısını görmüştü; burada nedensel anlatıyı tamamlıyoruz.
+        if model.rivalAggression >= Balance.rivalCardThreshold && (ratio > 0 ? ratio < 2.5 : true) {
+            let cacUp = Int((model.rivalCacMultiplier - 1) * 100)
+            let churnUp = Int((model.rivalChurnMultiplier - 1) * 100)
+            lines.append(String(format:
+                "Rakip baskısı yüksekti: fiyat savaşı CAC'i ~%%%d, yetenek avı/kopya churn'ü ~%%%d artırdı — bu dalga geçiciydi ama sen büyürken gelir yetişemedi.",
+                cacUp, churnUp))
+        }
+
         // Yedek: hiç kural tetiklemediyse genel teşhis ver (boş bırakma).
         if lines.isEmpty {
             lines.append(
@@ -281,6 +358,87 @@ struct PostMortemView: View {
 
         // 4 ile sınırla — fazla madde okuyucuyu boğar.
         return Array(lines.prefix(4))
+    }
+
+    // MARK: - En iyi & en kötü kararlar — mechanicTouchCounts üstünden türetilmiş öz-değerlendirme.
+    /// Oyuncunun bu denemede en çok / en az dokunduğu karar mekaniği → "neyi iyi/eksik yaptın".
+    /// Suçlayıcı değil: en çok kullanılan = güçlü yön, hiç kullanılmayan kritik = fırsat.
+
+    private var decisionsSection: some View {
+        VStack(alignment: .leading, spacing: Space.s2) {
+            HStack(spacing: Space.s2) {
+                Image(systemName: "scale.3d")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+                Text("KARARLARIN")
+                    .font(.caption).kerning(0.8)
+                    .foregroundStyle(theme.accent)
+            }
+            VStack(alignment: .leading, spacing: Space.s2) {
+                if let best = bestDecision {
+                    decisionRow(icon: "hand.thumbsup.fill", tint: Palette.success,
+                                label: "En güçlü tarafın", text: best)
+                }
+                if let worst = worstDecision {
+                    decisionRow(icon: "hand.thumbsdown.fill", tint: penColor,
+                                label: "En zayıf tarafın", text: worst)
+                }
+            }
+            .padding(Space.s3)
+            .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+        }
+    }
+
+    private func decisionRow(icon: String, tint: Color, label: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: Space.s2) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.appText(10, .bold)).foregroundStyle(tint)
+                Text(text)
+                    .font(.appText(12, .medium)).foregroundStyle(theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// İnsan-okunur mekanik etiketi (lessonMechanic anahtarı → Türkçe alan adı).
+    private func mechanicLabel(_ key: String) -> String {
+        switch key {
+        case "equity":              return "Yatırımcı/hisse"
+        case "runway":              return "Kriz/runway yönetimi"
+        case "morale":              return "Ekip morali"
+        case "hiring":              return "İşe alım"
+        case "product-market-fit":  return "Ürün-pazar uyumu"
+        case "marketing":           return "Pazarlama"
+        case "strategy":            return "Strateji/fırsat"
+        default:                    return "Karar"
+        }
+    }
+
+    /// En çok dokunulan karar mekaniği → güçlü yön. Hiç karar yoksa nil (bölüm boş satır göstermez).
+    private var bestDecision: String? {
+        guard let top = model.state.mechanicTouchCounts.max(by: { $0.value < $1.value }), top.value > 0
+        else { return nil }
+        return "\(mechanicLabel(top.key)) kararlarına en çok eğildin (\(top.value)×) — burada ustalaştın."
+    }
+
+    /// En çok dokunulanın dışında, hiç/az dokunulan KRİTİK mekanik → en zayıf taraf.
+    private var worstDecision: String? {
+        let counts = model.state.mechanicTouchCounts
+        // Hayatta-kalma için kritik mekanikler — hiç dokunulmamışsa en büyük açık.
+        let critical = ["runway", "product-market-fit", "marketing", "equity"]
+        if let missing = critical.first(where: { (counts[$0] ?? 0) == 0 }) {
+            return "\(mechanicLabel(missing)) tarafına hiç eğilmedin — bu açık pahalıya patladı."
+        }
+        // Hepsine dokunduysa: en az dokunulanı işaret et.
+        guard counts.count >= 2,
+              let least = counts.min(by: { $0.value < $1.value }), least.value > 0
+        else { return nil }
+        return "\(mechanicLabel(least.key)) en az ilgilendiğin alandı (\(least.value)×) — sonraki sefer dengele."
     }
 
     // MARK: - Sonraki Deneme İçin Strateji — 3 somut öneri, diagnostic'e bağlı seçim.
@@ -448,11 +606,28 @@ struct PostMortemView: View {
                 .modifier(AppButton.primary(theme))
             }
             .buttonStyle(.pressable)
-            Text("Tecrübe kalıcı; bir sonraki şirketin daha güçlü başlar.")
+            // ADİL & ŞEFFAF iz gösterimi: oyuncu boostı VE izi açıkça görür — sürpriz ceza yok.
+            Text(scarNote)
                 .font(.appText(10, .medium))
                 .foregroundStyle(theme.subtle)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, Space.s1)
+    }
+
+    /// Sonraki denemenin somut etkisini ŞEFFAF anlat: nakit boostı (tecrübe ödülü) +
+    /// itibar izi (modest, zamanla solar). Adil — oyuncu ne kazanıp ne kaybedeceğini görür.
+    private var scarNote: String {
+        let boost = Int((model.nextAttemptCashBoost * 100).rounded())
+        let scar = Int(model.nextAttemptReputationScar.rounded())
+        if boost > 0 && scar > 0 {
+            return "Tecrübe kalıcı: sonraki şirket +%\(boost) nakitle başlar. İflas izi: başlangıç itibarı −\(scar) (deneyimle solar)."
+        } else if boost > 0 {
+            return "Tecrübe kalıcı: sonraki şirketin +%\(boost) daha çok nakitle başlar."
+        } else if scar > 0 {
+            return "İflas izi: başlangıç itibarı −\(scar) puan — modest ve deneyim arttıkça solar."
+        }
+        return "Tecrübe kalıcı; bir sonraki şirketin daha güçlü başlar."
     }
 }

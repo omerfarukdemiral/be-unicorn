@@ -256,6 +256,7 @@ extension DecisionCategory {
         case .product:     return "product-market-fit"
         case .market:      return "marketing"
         case .opportunity: return "strategy"
+        case .competitive: return "marketing"
         }
     }
 }

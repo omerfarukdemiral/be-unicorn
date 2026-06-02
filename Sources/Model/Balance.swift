@@ -245,6 +245,17 @@ enum Balance {
     static let quitMoraleThreshold: Double = 28
     static let unpaidMoralePenalty: Double = 40  // maaş ödenemezse hedefe ek baskı
 
+    // MARK: İflas izi (scar) + NG+ kalıcı tecrübe boostı (Anlamlı İflas)
+    // Tasarım: iflas KALICI iz bırakır ama BRUTAL değil — adil, açıkça gösterilen, ZAMANLA SOLAN.
+    //  • Cash boostı: founderXP × bu oran, ama TAVAN'lı → erken oyunu ezmesin, denge bozulmasın.
+    //  • İtibar izi: her iflas başlangıç itibarını modest düşürür; tecrübe (founderXP) biriktikçe
+    //    iz hafifler (öğrenen kurucunun yeni denemesi ekosistemde daha az "yanık" başlar) → ZAMANLA SOLAR.
+    static let bankruptcyXPCashBonusPerXP: Double = 0.1   // founderXP başına +%10 başlangıç nakdi
+    static let bankruptcyXPCashBonusCap: Double = 0.4     // toplam boost tavanı (+%40) — erken-oyun koruması
+    static let bankruptcyReputationScarPerCount: Double = 4   // her iflas için başlangıç itibarından düşülen puan
+    static let bankruptcyReputationScarCap: Double = 12       // toplam iz tavanı (modest — brutal değil)
+    static let bankruptcyScarFadePerXP: Double = 0.06         // founderXP başına izin SOLMA oranı (deneyim iyileştirir)
+
     // Hisse / değerleme
     static let revenueMultiple: Double = 7.0     // değerleme = ARR * multiple bileşeni
     static let perUserValue: Double = 6.0        // kullanıcı başına değerleme bileşeni
@@ -266,6 +277,42 @@ enum Balance {
     static let decisionMaxInterval: Double = 80
     /// Yüksek hızda bile iki karar arası en az bu kadar GERÇEK saniye geçmeli (kart yağmuru engeli).
     static let decisionMinRealSeconds: Double = 15
+
+    // MARK: Kriz can-simidi (P0-1 ölüm-spirali düzeltmesi)
+    // Runway bu eşiğin ALTINA düşünce karar kartı seçimi MUTLAKA crisis kategorisinden olur
+    // (büyüme/fırsat kartı çıkmaz). Uygun crisis kartı havuzda yoksa garantili acil-köprü
+    // (emergency-bridge) kartı dağıtılır → oyuncu ölüm-spiralinde "nakit harca" kartı görmez,
+    // her zaman krize UYGUN + birden çok geçerli yanıt taşıyan bir kart bulur (Tasarım DNA).
+    static let crisisLifelineRunwayMonths: Double = 2
+
+    // MARK: Tepki Veren Rakip (Eskalasyon / Antagonist) — Pasif Kohort → Canlı Tehdit
+    //
+    // Oyuncu hızlı büyüdüğünde (evre atlama / MRR sıçraması / kullanıcı patlaması) pasif rakip
+    // kohortundan biri TEPKİ verir: fiyat savaşı (geçici CAC↑) ya da yetenek avlama/kopya özellik
+    // (geçici churn↑). Baskı `rivalAggression` (0..1) ile temsil edilir; her tick yumuşakça SOLAR
+    // (kalıcı değil — orta-oyun platosunu kıran sürekli ama ADİL bir dalga). Etki TAVANLI tutulur
+    // ki 4 arketip (Bootstrap/VC-Roket/Niş/Platform) hâlâ Unicorn'a ulaşabilsin (denge kısıdı).
+    //
+    /// rivalAggression'ın aylık doğal sönümü (oransal): baskı solar, kalıcı ceza yok.
+    /// Örn 0.5 → her ay baskının ~yarısı sönerek "geçici dalga" hissini garanti eder.
+    static let rivalAggressionDecayPerMonth: Double = 0.5
+    /// Evre atlamada (büyük başarı) eklenen baskı sıçraması (0..1 ölçeğinde).
+    static let rivalAggressionStageJump: Double = 0.6
+    /// Çeyrek terfisinde (kohortta öne geçtin) eklenen baskı.
+    static let rivalAggressionPromote: Double = 0.45
+    /// Çeyrek düşüşünde rakiplerin "sakinleşmesi" (baskı bu oranda azalır — geri-dönüş kancası).
+    static let rivalAggressionDemoteRelief: Double = 0.5
+    /// Hızlı MRR büyümesi tetik eşiği (bir çeyrek-dilimde oransal artış) ve eklediği baskı.
+    static let rivalMRRGrowthTriggerPct: Double = 0.5    // bir tetik penceresinde +%50 MRR
+    static let rivalAggressionMRRSurge: Double = 0.35
+    /// Tam baskıda (rivalAggression=1) CAC'e uygulanan en yüksek çarpan artışı (fiyat savaşı).
+    /// TAVAN <0.3 (denge kısıdı): tam baskıda CAC en fazla ×1.28 olur, eğri bozulmaz.
+    static let rivalCacPressureMax: Double = 0.28
+    /// Tam baskıda churn'e uygulanan en yüksek çarpan artışı (yetenek avı / kopya özellik).
+    /// TAVAN <0.2 (denge kısıdı): tam baskıda churn en fazla ×1.18 olur.
+    static let rivalChurnPressureMax: Double = 0.18
+    /// Karar kartı tetiklemek için yeterli sayılan baskı eşiği (bu altında competitive kart çıkmaz).
+    static let rivalCardThreshold: Double = 0.35
 
     // MARK: Departmanlar
     static let departments: [DepartmentDef] = [

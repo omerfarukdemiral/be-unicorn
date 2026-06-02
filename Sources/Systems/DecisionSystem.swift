@@ -4,6 +4,9 @@ import Foundation
 
 enum DecisionCategory: String {
     case investor, crisis, press, team, product, market, opportunity
+    /// Tepki Veren Rakip (Antagonist): kohorttan bir rakip oyuncuya hamle yapar
+    /// (fiyat savaşı / yetenek avı / kopya özellik). Birden çok geçerli yanıt taşır.
+    case competitive
     var tint: String {
         switch self {
         case .investor:    return "5B8DEF"
@@ -13,6 +16,7 @@ enum DecisionCategory: String {
         case .product:     return "4FD1A1"
         case .market:      return "FF9F5A"
         case .opportunity: return "2EE6C5"
+        case .competitive: return "FF6B6B"
         }
     }
 }
@@ -109,9 +113,39 @@ enum DecisionSystem {
     @MainActor
     static func pick(for model: GameModel, state: GameState) -> DecisionCard? {
         let eligible = DecisionContent.all.filter { isEligible($0, model: model, state: state) }
+        let raw: DecisionCard
+
+        // P0-1 CAN-SİMİDİ GUARD: runway kritik eşiğin altında (ölüm-spirali) ise oyuncu ASLA
+        // büyüme/fırsat kartı görmemeli. Önce uygun crisis kartlarını süz; varsa SADECE onlardan
+        // seç (state'e göre ağırlıklı). Hiç crisis kartı uygun değilse (havuz tükendi) garantili
+        // acil-köprü (emergency-bridge) kartını dağıt → krize her zaman UYGUN + çok-yanıtlı bir
+        // kart bulunur (tek doğru cevap yok — Tasarım DNA).
+        if model.runwayMonths < Balance.crisisLifelineRunwayMonths {
+            let crisisCards = eligible.filter { $0.category == .crisis }
+            if let picked = weightedPick(from: crisisCards, health: .crisis,
+                                         chainCount: state.crisisChainCount) {
+                raw = interpolated(picked, with: CompanyContext(state: state))
+                return raw
+            }
+            return interpolated(emergencyBridgeFallback(), with: CompanyContext(state: state))
+        }
+
+        // TEPKI VEREN RAKİP: rakip baskısı (rivalAggression) eşiği aştıysa, kohorttan bir rakip
+        // oyuncuya hamle yapmıştır → bu turun kartı YÜKSEK OLASILIKLA competitive kategorisinden
+        // seçilir (büyüme platosunu kıran ADİL baskı). Tek doğru cevap yok: her competitive kart
+        // birden çok geçerli yanıt taşır. Olasılıkla (her tetikte değil) — oyun ritmi tek-renk olmasın.
+        if state.rivalAggression >= Balance.rivalCardThreshold {
+            let competitiveCards = eligible.filter { $0.category == .competitive }
+            // Baskı büyüdükçe competitive kartın bu turda çıkma olasılığı artar (0.5..0.9 bandı).
+            let surfaceChance = min(0.9, 0.5 + state.rivalAggression * 0.4)
+            if !competitiveCards.isEmpty, Double.random(in: 0..<1) < surfaceChance,
+               let picked = competitiveCards.randomElement() {
+                return interpolated(picked, with: CompanyContext(state: state))
+            }
+        }
+
         // Havuz boşaldıysa (örn. tüm once kartları tükendi, erken evre) DEAD AIR olmasın:
         // jenerik, etkisiz bir "mentor ipucu" kartı dön — oyuncu akışta kalır.
-        let raw: DecisionCard
         if eligible.isEmpty {
             raw = mentorTipFallback()
         } else if let picked = weightedPick(from: eligible, health: model.companyHealth,
@@ -159,6 +193,30 @@ enum DecisionSystem {
                             choices: [DecisionChoice(pick.1, detail: nil, effects: [], result: pick.2)])
     }
 
+    /// P0-1 GARANTİLİ ACİL-KÖPRÜ KARTI: runway kritik (ölüm-spirali) ve uygun başka crisis
+    /// kartı kalmadığında dağıtılır. Krize UYGUN + birden çok GEÇERLİ yanıt taşır (tek doğru
+    /// cevap yok — Tasarım DNA). Hiçbir seçenek "bedava" değildir: her biri bir takas (hisse /
+    /// moral / gelecekteki yük). Köprü kredisinin bedeli GECİKMELİ etkiyle 6 ay sonra patlar
+    /// (zincirleme + gecikmeli ders), böylece "kredi al" refleksi gerçek bir bahistir.
+    static func emergencyBridgeFallback() -> DecisionCard {
+        DecisionCard("emergency-bridge", category: .crisis, speaker: "Mali İşler", icon: "🆘",
+            prompt: "{{company}} nakit tükeniyor — runway kritik. Kapanmadan önce bir hamle gerek. Tek doğru yol yok; her seçenek bir bedel ister.",
+            choices: [
+                .init("Köprü kredisi al", detail: "+nakit şimdi / 6 ay sonra geri ödeme zinciri",
+                      effects: [.cash(25_000), .reputation(-2)],
+                      result: "Kredi geldi, kasa nefes aldı. (Borç runway uzatır ama yeni bir saat kurar — gelir yetişmezse köprü ikinci krizi getirir.)",
+                      delayed: [DelayedEffect(delayMonths: 6,
+                                              effects: [.cash(-32_000), .moraleTargetBonus(-1)],
+                                              note: "Köprü kredisinin geri ödemesi geldi — gelir yetişmediyse bu ikinci bir kriz başlatır.")]),
+                .init("Acil gider kıs: reklamı durdur, kemer sık", detail: "−büyüme / +runway hemen",
+                      effects: [.usersPercent(-0.04), .morale(-4), .reputation(1)],
+                      result: "Gideri kestin, yangını söndürdün. (Default-alive olmak çoğu zaman büyümeyi değil hayatta kalmayı seçmektir.)"),
+                .init("Köprü turu: yatırımcıdan acil sermaye", detail: "+nakit / −%4 hisse (sert koşul)",
+                      effects: [.cash(40_000), .equity(-0.04), .morale(2)],
+                      result: "Yatırımcı kurtardı ama pahalıya. (Krizde toplanan tur en yüksek dilution'lı turdur — kontrolün bir parçası gitti.)")
+            ])
+    }
+
     /// Sağlık durumuna göre kategori ağırlıkları üret + ağırlıklı rastgele seçim.
     static func weightedPick(from cards: [DecisionCard],
                              health: CompanyHealth,
@@ -182,30 +240,33 @@ enum DecisionSystem {
         switch health {
         case .crisis:
             // Kırmızı bölge: crisis kartları baskın, team/product kurtarma uygun, opportunity nadir.
+            // competitive düşük (kriz can-simidi guard'ı zaten önceler — rakip baskısı krizi azdırır
+            // ama ana mesaj "ayakta kal").
             var w: [DecisionCategory: Double] = [
                 .crisis: 8.0, .team: 3.0, .product: 2.5, .market: 1.5,
-                .investor: 1.0, .press: 0.5, .opportunity: 0.4
+                .investor: 1.0, .press: 0.5, .opportunity: 0.4, .competitive: 1.0
             ]
             // Uzun zincir → crisis kartlarına neredeyse garanti yönlendir (oyuncu tepki vermeli).
             if chainCount > 2 { w[.crisis] = 14.0 }
             return w
         case .strained:
-            // Sarı bölge: önleyici uyarılar — crisis + team + product + biraz market.
+            // Sarı bölge: önleyici uyarılar — crisis + team + product + biraz market + rakip baskısı.
             return [
                 .crisis: 3.5, .team: 3.0, .product: 2.5, .market: 2.0,
-                .investor: 1.5, .press: 1.0, .opportunity: 1.0
+                .investor: 1.5, .press: 1.0, .opportunity: 1.0, .competitive: 2.0
             ]
         case .healthy:
-            // Yeşil bölge: fırsatlar + basın + yatırımcı + iş-akışı karışım.
+            // Yeşil bölge: fırsatlar baskın — AMA hızlı büyüyen oyuncu rakip dikkatini çeker:
+            // competitive burada en yüksek (büyüme ivmesi antagonisti uyandırır — orta-oyun platosunu kırar).
             return [
                 .crisis: 0.5, .team: 1.5, .product: 1.5, .market: 1.5,
-                .investor: 2.5, .press: 2.5, .opportunity: 3.0
+                .investor: 2.5, .press: 2.5, .opportunity: 3.0, .competitive: 3.0
             ]
         case .recovering:
-            // Toparlanma: ekip + ürün + fırsat hafifçe baskın; crisis hâlâ olası ama düşük.
+            // Toparlanma: ekip + ürün + fırsat hafifçe baskın; rakip baskısı orta.
             return [
                 .crisis: 1.0, .team: 2.5, .product: 2.5, .market: 1.5,
-                .investor: 1.5, .press: 1.5, .opportunity: 2.5
+                .investor: 1.5, .press: 1.5, .opportunity: 2.5, .competitive: 1.5
             ]
         }
     }
