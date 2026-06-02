@@ -6,6 +6,12 @@ struct GameState: Codable {
     /// Eski kayıtta yoksa varsayılan 1 gelir (decode patlamaz).
     var schemaVersion: Int = 1
 
+    /// Deterministik RNG tohumu — ekonomi-kritik rastgelelik buradan türetilir
+    /// ("aynı tohum → aynı oyun"; test/replay/balans-sim). 0 = henüz atanmadı:
+    /// GameModel ilk açılışta gerçek bir tohum üretip kalıcılaştırır. Eski
+    /// kayıtlarda alan yoksa 0 gelir → ilk yüklemede otomatik tohumlanır.
+    var seed: UInt64 = 0
+
     // Para & şirket
     var cash: Double = Balance.startCash
     var lifetimeRevenue: Double = 0
@@ -172,6 +178,7 @@ struct GameState: Codable {
             ((try? c.decodeIfPresent(T.self, forKey: k)) ?? nil) ?? def
         }
         schemaVersion = g(.schemaVersion, 1)
+        seed = g(.seed, UInt64(0))
         cash = g(.cash, Balance.startCash)
         lifetimeRevenue = g(.lifetimeRevenue, 0)
         users = g(.users, 0)

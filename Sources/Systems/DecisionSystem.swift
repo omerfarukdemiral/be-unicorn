@@ -111,7 +111,8 @@ enum DecisionSystem {
     /// - `.recovering`: team + product + opportunity (toparlanma desteği).
     /// - Uzun zincir (`crisisChainCount > 2`): crisis kartları neredeyse garanti.
     @MainActor
-    static func pick(for model: GameModel, state: GameState) -> DecisionCard? {
+    static func pick<R: RandomNumberGenerator>(for model: GameModel, state: GameState,
+                                               using rng: inout R) -> DecisionCard? {
         let eligible = DecisionContent.all.filter { isEligible($0, model: model, state: state) }
         let raw: DecisionCard
 
@@ -123,7 +124,7 @@ enum DecisionSystem {
         if model.runwayMonths < Balance.crisisLifelineRunwayMonths {
             let crisisCards = eligible.filter { $0.category == .crisis }
             if let picked = weightedPick(from: crisisCards, health: .crisis,
-                                         chainCount: state.crisisChainCount) {
+                                         chainCount: state.crisisChainCount, using: &rng) {
                 raw = interpolated(picked, with: CompanyContext(state: state))
                 return raw
             }
@@ -138,8 +139,8 @@ enum DecisionSystem {
             let competitiveCards = eligible.filter { $0.category == .competitive }
             // Baskı büyüdükçe competitive kartın bu turda çıkma olasılığı artar (0.5..0.9 bandı).
             let surfaceChance = min(0.9, 0.5 + state.rivalAggression * 0.4)
-            if !competitiveCards.isEmpty, Double.random(in: 0..<1) < surfaceChance,
-               let picked = competitiveCards.randomElement() {
+            if !competitiveCards.isEmpty, Double.random(in: 0..<1, using: &rng) < surfaceChance,
+               let picked = competitiveCards.randomElement(using: &rng) {
                 return interpolated(picked, with: CompanyContext(state: state))
             }
         }
@@ -149,7 +150,7 @@ enum DecisionSystem {
         if eligible.isEmpty {
             raw = mentorTipFallback()
         } else if let picked = weightedPick(from: eligible, health: model.companyHealth,
-                                            chainCount: state.crisisChainCount) {
+                                            chainCount: state.crisisChainCount, using: &rng) {
             raw = picked
         } else {
             return nil
@@ -218,16 +219,17 @@ enum DecisionSystem {
     }
 
     /// Sağlık durumuna göre kategori ağırlıkları üret + ağırlıklı rastgele seçim.
-    static func weightedPick(from cards: [DecisionCard],
+    static func weightedPick<R: RandomNumberGenerator>(from cards: [DecisionCard],
                              health: CompanyHealth,
-                             chainCount: Int) -> DecisionCard? {
+                             chainCount: Int,
+                             using rng: inout R) -> DecisionCard? {
         let weights = categoryWeights(health: health, chainCount: chainCount)
         let weighted: [(DecisionCard, Double)] = cards.map { card in
             (card, max(0.0001, weights[card.category] ?? 1.0))
         }
         let total = weighted.reduce(0.0) { $0 + $1.1 }
-        guard total > 0 else { return cards.randomElement() }
-        var roll = Double.random(in: 0..<total)
+        guard total > 0 else { return cards.randomElement(using: &rng) }
+        var roll = Double.random(in: 0..<total, using: &rng)
         for (card, w) in weighted {
             if roll < w { return card }
             roll -= w

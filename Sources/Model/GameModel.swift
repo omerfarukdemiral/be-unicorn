@@ -98,6 +98,12 @@ final class GameModel: ObservableObject {
     private var lastRivalStage: Int = -1
     private var rivalMRRWindow: Double = 0   // MRR tetik penceresi sayacı (oyun-ayı)
 
+    /// Ekonomi-kritik rastgelelik üreticisi — `state.seed`'den tohumlanır
+    /// ("aynı tohum → aynı oyun"). Karar seçimi/zamanlaması, senaryo türü ve
+    /// rakip kohortu bu akıştan beslenir. Kozmetik rastgelelik (isim/ipucu) seed'siz.
+    /// init/restart/reset her zaman `seedRNG()` ile yeniden tohumlar.
+    private var rng = SplitMix64RNG(seed: 1)
+
     init() {
         if let saved = SaveManager.load() {
             state = saved
@@ -108,6 +114,7 @@ final class GameModel: ObservableObject {
         // Eski kayıtlarda ₺/€ seçilmiş olsa bile görüntü dolara sabitlenir.
         state.currency = .usd
         BigNumber.currency = .usd
+        seedRNG()   // deterministik RNG'yi state.seed'den tohumla (yoksa üret + kalıcılaştır)
         applyOfflineProgress()
         seedQuarterSnapshotIfNeeded()
         seedSprintIfNeeded()
@@ -656,7 +663,7 @@ final class GameModel: ObservableObject {
     /// Yeni hire'ın beceri seviyesi rulosu (1-5). Çoğu L1-L2, nadiren L4-L5 — kozmetik.
     /// Ekonomi formüllerini ETKİLEMEZ (skill SADECE UI rozeti içindir).
     private func rollSkillLevel() -> Int {
-        let r = Double.random(in: 0..<1)
+        let r = Double.random(in: 0..<1, using: &rng)
         if r < 0.55 { return 1 }
         if r < 0.85 { return 2 }
         if r < 0.96 { return 3 }
@@ -916,7 +923,7 @@ final class GameModel: ObservableObject {
     /// Oyuncunun mevcut ligine uygun güçte taze rakip kohort üret (yeni hafta gibi).
     /// Her rakip: ad + sektör + kurucu ad/soyad + flagship proje + canlı skor.
     private func regenerateCohort() {
-        state.cohortCompetitors = CohortSystem.freshCompetitors(tier: state.leagueTier)
+        state.cohortCompetitors = CohortSystem.freshCompetitors(tier: state.leagueTier, using: &rng)
         state.cohortTier = state.leagueTier
         // Eski paralel dizileri temizle (kafa karışıklığı + ileride drop edilebilir).
         state.cohortNames.removeAll()
@@ -928,7 +935,7 @@ final class GameModel: ObservableObject {
         guard !state.cohortCompetitors.isEmpty else { return }
         state.cohortCompetitors = CohortSystem.advancedCompetitors(
             state.cohortCompetitors, tier: state.leagueTier,
-            progress: quarterProgress, dt: dt)
+            progress: quarterProgress, dt: dt, using: &rng)
     }
 
     // MARK: Tepki Veren Rakip (Eskalasyon / Antagonist) — pasif kohort → canlı tehdit
@@ -1413,7 +1420,7 @@ final class GameModel: ObservableObject {
         // İlk spawn için lastSpawnMonth=0 ise kuruluştan itibaren aralığa göre.
         guard sinceLast >= Balance.scenarioSpawnIntervalMonths else { return }
 
-        let kind = ScenarioSystem.pickKind(stage: state.stage, active: activeScenarios)
+        let kind = ScenarioSystem.pickKind(stage: state.stage, active: activeScenarios, using: &rng)
         let target = ScenarioSystem.targetValue(for: kind, snapshot: scenarioSnapshot)
         let instance = ScenarioInstance(
             kind: kind.rawValue,
@@ -1477,7 +1484,7 @@ final class GameModel: ObservableObject {
     // MARK: - Kararlar (event kartları)
 
     private func scheduleNextDecision() {
-        nextDecisionAt = Double.random(in: Balance.decisionMinInterval...Balance.decisionMaxInterval)
+        nextDecisionAt = Double.random(in: Balance.decisionMinInterval...Balance.decisionMaxInterval, using: &rng)
         sinceDecision = 0
         sinceDecisionReal = 0
     }
@@ -1496,7 +1503,7 @@ final class GameModel: ObservableObject {
         guard !anyBlockingOverlay else { return }                  // başka popup açıkken bekle
         guard sinceDecision >= nextDecisionAt else { return }
         guard sinceDecisionReal >= Balance.decisionMinRealSeconds else { return }  // gerçek-zaman tabanı (kart yağmuru engeli)
-        guard let card = DecisionSystem.pick(for: self, state: state) else {
+        guard let card = DecisionSystem.pick(for: self, state: state, using: &rng) else {
             sinceDecision = 0   // uygun kart yok, biraz sonra tekrar dene
             return
         }
@@ -1507,7 +1514,7 @@ final class GameModel: ObservableObject {
     /// Acil/kriz kartını hemen tetikle (örn. düşük runway).
     func forceDecisionIfAvailable() {
         guard pendingEvent == nil else { return }
-        if let card = DecisionSystem.pick(for: self, state: state) {
+        if let card = DecisionSystem.pick(for: self, state: state, using: &rng) {
             pendingEvent = card
             Feedback.decision()   // acil karar kartı geldi
         }
@@ -1639,6 +1646,28 @@ final class GameModel: ObservableObject {
         save()
     }
 
+    // MARK: - Deterministik RNG (Faz 0)
+
+    /// `state.seed`'den RNG'yi tohumla. Tohum 0 ise (yeni oyun / eski kayıt) gerçek bir
+    /// tohum üretip state'e yazar ve kalıcılaştırır → "aynı tohum → aynı oyun" garantisi.
+    private func seedRNG() {
+        if state.seed == 0 {
+            // 0 "atanmadı" işaretidir; gerçek, sıfırdan-farklı bir tohum üret.
+            var s: UInt64 = 0
+            while s == 0 { s = UInt64.random(in: UInt64.min ... UInt64.max) }
+            state.seed = s
+            save()
+        }
+        rng = SplitMix64RNG(seed: state.seed)
+    }
+
+    /// Test/replay dikişi: tohumu açıkça ayarla ve RNG akışını sıfırla.
+    /// (Aynı tohumla iki oyun aynı ekonomi-kritik diziyi üretir.)
+    func reseed(_ seed: UInt64) {
+        state.seed = seed
+        rng = SplitMix64RNG(seed: seed == 0 ? 1 : seed)
+    }
+
     func restartAfterBankruptcy() {
         let xp = state.founderXP
         let reached = state.stageReached
@@ -1677,6 +1706,7 @@ final class GameModel: ObservableObject {
             ]
         }
         state = fresh
+        seedRNG()              // yeni deneme = yeni tohum (kohort üretiminden ÖNCE tohumla)
         debtMonths = 0
         pendingBankruptcy = false
         lastRivalStage = fresh.stage   // Tepki Veren Rakip: yeni denemede sahte stage-jump tetiklenmesin
@@ -1694,6 +1724,7 @@ final class GameModel: ObservableObject {
         fresh.hasSeenOnboarding = true
         fresh.profile.setupComplete = false   // → CompanySetupOverlay
         state = fresh
+        seedRNG()              // baştan başla = yeni tohum
         debtMonths = 0
         lastRivalStage = fresh.stage   // Tepki Veren Rakip: yeni kuruluşta sahte tetik olmasın
         rivalMRRWindow = 0
@@ -1726,7 +1757,13 @@ final class GameModel: ObservableObject {
         guard realDt > 0 else { return }
         // Duraklatıldıysa: zaman donar — economy/karar/moral/projeler ilerlemez.
         if isPaused { return }
+        step(realDt: realDt)
+    }
 
+    /// Tek simülasyon adımı — `tick()`'in saf gövdesi (Timer/Date'ten bağımsız).
+    /// `tick()` gerçek-zaman dt'sini hesaplayıp bunu çağırır; testler/headless mod
+    /// sabit dt ile çağırır → deterministik ilerleme (seedli RNG ile birlikte).
+    private func step(realDt: Double) {
         // Oyun-zamanı dt = gerçek dt × hız çarpanı (zaman hızlandırma).
         let dt = realDt * speed
 
@@ -1775,6 +1812,27 @@ final class GameModel: ObservableObject {
 
         sinceTip += dt
         if sinceTip >= 12 { sinceTip = 0; setTip(NarrativeContent.tips) }
+    }
+
+    /// Test/headless: simülasyonu `months` oyun-ayı boyunca deterministik olarak ilerlet
+    /// (Timer'sız, sabit alt-adımlarla). Her ay sınırında metrik anlık görüntüsü döner.
+    /// Aynı tohum + aynı kurulum → eleman-eleman aynı dizi (Faz 0 kabul kriteri).
+    @discardableResult
+    func advanceMonthsHeadless(_ months: Int, stepsPerMonth: Int = 10) -> [MetricSnapshot] {
+        let prevSpeed = speed
+        speed = 1
+        lastTick = Date()
+        let realDtPerStep = Balance.secondsPerMonth / Double(max(1, stepsPerMonth))
+        var out: [MetricSnapshot] = []
+        out.reserveCapacity(months)
+        for _ in 0..<max(0, months) {
+            for _ in 0..<max(1, stepsPerMonth) { step(realDt: realDtPerStep) }
+            out.append(MetricSnapshot(month: state.months, cash: state.cash, users: state.users,
+                                      morale: state.morale, mrr: mrr, valuation: valuation,
+                                      reputation: state.reputation))
+        }
+        speed = prevSpeed
+        return out
     }
 
     private func advanceEconomy(_ monthFraction: Double) {
@@ -2128,6 +2186,18 @@ struct CausalNote: Identifiable, Equatable {
     let icon: String
     let text: String
     let tone: Tone
+}
+
+/// Headless/test ilerlemesinin ay-sınırı metrik anlık görüntüsü. Determinizm
+/// testleri iki oyunun dizilerini eleman-eleman karşılaştırır (Faz 0 kabul kriteri).
+struct MetricSnapshot: Equatable {
+    let month: Double
+    let cash: Double
+    let users: Double
+    let morale: Double
+    let mrr: Double
+    let valuation: Double
+    let reputation: Double
 }
 
 /// Programlı senaryonun deadline'ında üretilen sonuç — overlay payload'u.

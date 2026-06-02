@@ -64,32 +64,24 @@ enum CohortSystem {
         return (min(85, lo), min(90, hi))
     }
 
-    /// Çeyrek başı için taze kohort üret: rastgele isimler + başlangıç skorları.
-    /// **DEPRECATED**: yeni kod `freshCompetitors(tier:)` kullansın. Eski save
-    /// dönüşüm yolu için tutuluyor.
-    static func freshCohort(tier: Int) -> (names: [String], scores: [Double]) {
-        let competitors = freshCompetitors(tier: tier)
-        return (competitors.map { $0.name }, competitors.map { $0.score })
-    }
-
     /// Zenginleştirilmiş rakip kohortu: her rakibin **sektör + kurucu + proje + skor**'u var.
     /// Leaderboard'da "Voltius (Fintech · Eren K.) — Atlas" gibi bağlam gösterilebilir.
     /// Sıralama deterministik DEĞİL (isim/sektör/proje/founder ayrı havuzlardan shuffled).
-    static func freshCompetitors(tier: Int) -> [Competitor] {
+    static func freshCompetitors<R: RandomNumberGenerator>(tier: Int, using rng: inout R) -> [Competitor] {
         let band = powerBand(tier: tier)
         let count = size - 1
-        let names = Array(namePool.shuffled().prefix(count))
-        let sectorIDs = Balance.sectors.shuffled().map { $0.id }
-        var first = NarrativeContent.founderFirstNames.shuffled()
-        var last = NarrativeContent.founderLastNames.shuffled()
-        var projects = NarrativeContent.projectNameSeeds.shuffled()
+        let names = Array(namePool.shuffled(using: &rng).prefix(count))
+        let sectorIDs = Balance.sectors.shuffled(using: &rng).map { $0.id }
+        var first = NarrativeContent.founderFirstNames.shuffled(using: &rng)
+        var last = NarrativeContent.founderLastNames.shuffled(using: &rng)
+        var projects = NarrativeContent.projectNameSeeds.shuffled(using: &rng)
 
         return names.enumerated().map { idx, name in
             let sec = sectorIDs[idx % sectorIDs.count]
             let firstN = first.isEmpty ? "Ada" : first.removeLast()
             let lastN  = last.isEmpty ? "Yılmaz" : last.removeLast()
             let proj   = projects.isEmpty ? "Atlas" : projects.removeLast()
-            let startScore = Double.random(in: max(0, band.low - 18) ... max(1, band.low - 4))
+            let startScore = Double.random(in: max(0, band.low - 18) ... max(1, band.low - 4), using: &rng)
             return Competitor(name: name, sector: sec,
                               founderFirstName: firstN, founderLastName: lastN,
                               projectName: proj, score: startScore)
@@ -118,8 +110,8 @@ enum CohortSystem {
 
     /// Rakip kohortunu (Competitor listesi) bir tick ilerlet — skorlar canlı leaderboard'da.
     /// Aynı algoritma (powerBand + yumuşak yaklaşım + titreşim), Competitor üzerinde çalışır.
-    static func advancedCompetitors(_ competitors: [Competitor], tier: Int,
-                                    progress: Double, dt: Double) -> [Competitor] {
+    static func advancedCompetitors<R: RandomNumberGenerator>(_ competitors: [Competitor], tier: Int,
+                                    progress: Double, dt: Double, using rng: inout R) -> [Competitor] {
         let band = powerBand(tier: tier)
         let span = band.high - band.low
         return competitors.enumerated().map { idx, c in
@@ -127,7 +119,7 @@ enum CohortSystem {
             let ceiling = band.low + seat * span
             let target = ceiling * (0.55 + 0.45 * min(1, max(0, progress)))
             let approach = (target - c.score) * min(1, 0.05 * dt)
-            let jitter = Double.random(in: -0.15 ... 0.2) * dt
+            let jitter = Double.random(in: -0.15 ... 0.2, using: &rng) * dt
             var fixed = c
             fixed.score = min(100, max(0, c.score + approach + jitter))
             return fixed

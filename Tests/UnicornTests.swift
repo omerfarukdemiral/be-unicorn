@@ -549,7 +549,8 @@ final class ScenarioTests: XCTestCase {
             ScenarioInstance(kind: kind.rawValue, startMonth: 0,
                              deadlineMonth: 2, goalTargetValue: 1000)
         }
-        let picked = ScenarioSystem.pickKind(stage: 6, active: Array(active))
+        var rng = SystemRandomNumberGenerator()
+        let picked = ScenarioSystem.pickKind(stage: 6, active: Array(active), using: &rng)
         // En çok 1 unlocked kind kalmış olmalı (last) — picked o olmalı.
         XCTAssertEqual(picked, ScenarioKind.allCases.last,
                        "Aktif tiplerle çakışmamalı")
@@ -682,8 +683,9 @@ final class ContextPersonalizationTests: XCTestCase {
         // Pick yeterince çağrıldığında muhtemelen angel-1'i de seçer (once card pool'da en başta).
         // Direkt: pick'i once-card limitiyle birden çok çağırıp "şirket adı geçen" bir card bekleyelim.
         var prompts: [String] = []
+        var rng = SystemRandomNumberGenerator()
         for _ in 0..<25 {
-            if let card = DecisionSystem.pick(for: model, state: model.state) {
+            if let card = DecisionSystem.pick(for: model, state: model.state, using: &rng) {
                 prompts.append(card.prompt)
             }
         }
@@ -709,7 +711,8 @@ final class ContextPersonalizationTests: XCTestCase {
     // MARK: Competitor üretimi
 
     func testFreshCompetitorsHaveCompleteIdentity() {
-        let comps = CohortSystem.freshCompetitors(tier: 2)
+        var rng = SystemRandomNumberGenerator()
+        let comps = CohortSystem.freshCompetitors(tier: 2, using: &rng)
         XCTAssertEqual(comps.count, CohortSystem.size - 1)
         for c in comps {
             XCTAssertFalse(c.name.isEmpty, "Rakip adı boş olamaz")
@@ -723,7 +726,8 @@ final class ContextPersonalizationTests: XCTestCase {
     }
 
     func testStandingsWithCompetitorsAttachesSubtitle() {
-        let comps = CohortSystem.freshCompetitors(tier: 0)
+        var rng = SystemRandomNumberGenerator()
+        let comps = CohortSystem.freshCompetitors(tier: 0, using: &rng)
         let entries = CohortSystem.standings(playerScore: 50,
                                              playerName: "BenimŞirketim",
                                              competitors: comps)
@@ -956,8 +960,9 @@ final class CrisisStateMachineTests: XCTestCase {
         }
         XCTAssertLessThan(m.runwayMonths, Balance.crisisLifelineRunwayMonths,
                           "Test ön koşulu: runway can-simidi eşiğinin altında olmalı")
+        var rng = SystemRandomNumberGenerator()
         for _ in 0..<40 {
-            guard let card = DecisionSystem.pick(for: m, state: m.state) else { continue }
+            guard let card = DecisionSystem.pick(for: m, state: m.state, using: &rng) else { continue }
             XCTAssertEqual(card.category, .crisis,
                            "Ölüm-spiralinde dağıtılan her kart crisis kategorisinden olmalı (\(card.id))")
         }
@@ -1037,6 +1042,86 @@ final class CrisisStateMachineTests: XCTestCase {
         XCTAssertEqual(back.pendingEffects.count, 1)
         XCTAssertEqual(back.pendingEffects.first?.applyAtMonth, 9)
         XCTAssertEqual(back.pendingEffects.first?.effects.first?.kind, "cash")
+    }
+}
+
+// MARK: - Faz 0: Deterministik Seed
+//
+// "Aynı tohum → aynı oyun." Ekonomi-kritik rastgelelik (karar seçimi/zamanlaması,
+// senaryo türü, rakip kohortu) state.seed'den türetilir; bu testler determinizmi,
+// tohum-duyarlılığını ve Codable kalıcılığını doğrular. (Kozmetik rastgelelik —
+// isim/ipucu önerileri — bilerek seed'siz; metrikleri etkilemez.)
+final class SeedDeterminismTests: XCTestCase {
+
+    /// Belirli bir tohumla, kuruluşu tamam, headless ilerlemeye hazır bir model.
+    /// Tohum diske YAZILIR → GameModel.init init-anı RNG çağrılarını (kohort üretimi,
+    /// karar zamanlaması) da bu tohumla yapar → kuruluştan itibaren tam deterministik.
+    @MainActor
+    private func seededModel(seed: UInt64) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.seed = seed
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        s.adBudgetPerMonth = 5_000   // büyüme/churn dinamiği canlı olsun (RNG yolları tetiklensin)
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    /// Saf RNG: aynı tohum aynı diziyi, farklı tohum farklı diziyi üretir.
+    func testSplitMix64IsDeterministicAndSeedSensitive() {
+        var r1 = SplitMix64RNG(seed: 42)
+        var r2 = SplitMix64RNG(seed: 42)
+        var r3 = SplitMix64RNG(seed: 43)
+        let s1 = (0..<8).map { _ in r1.next() }
+        let s2 = (0..<8).map { _ in r2.next() }
+        let s3 = (0..<8).map { _ in r3.next() }
+        XCTAssertEqual(s1, s2, "Aynı tohum → aynı RNG dizisi")
+        XCTAssertNotEqual(s1, s3, "Farklı tohum → farklı RNG dizisi")
+    }
+
+    /// Aynı tohumla iki oyun, 12 ay boyunca eleman-eleman aynı metrik dizisini üretir.
+    @MainActor
+    func testSameSeedProducesIdenticalMetricSequence() {
+        let a = seededModel(seed: 0x1234_5678)
+        let b = seededModel(seed: 0x1234_5678)
+        let sa = a.advanceMonthsHeadless(12)
+        let sb = b.advanceMonthsHeadless(12)
+        XCTAssertEqual(sa.count, 12)
+        XCTAssertEqual(sa, sb, "Aynı tohum → 12-ay metrik dizisi birebir aynı olmalı")
+    }
+
+    /// Farklı tohumlar 12 ay içinde ıraksar (seedli rastgelelik gerçekten sonuca giriyor).
+    @MainActor
+    func testDifferentSeedsDivergeWithinTwelveMonths() {
+        let a = seededModel(seed: 1)
+        let b = seededModel(seed: 0xDEAD_BEEF)
+        let sa = a.advanceMonthsHeadless(12)
+        let sb = b.advanceMonthsHeadless(12)
+        XCTAssertNotEqual(sa, sb, "Farklı tohum → metrik dizisi farklı olmalı (RNG sonuca giriyor)")
+    }
+
+    /// Tohum, GameState Codable round-trip'inde korunur (kayıt/yükleme).
+    @MainActor
+    func testSeedSurvivesCodableRoundTrip() throws {
+        let a = seededModel(seed: 0xCAFE)
+        let data = try JSONEncoder().encode(a.state)
+        let decoded = try JSONDecoder().decode(GameState.self, from: data)
+        XCTAssertEqual(decoded.seed, 0xCAFE, "Tohum encode/decode sonrası korunmalı")
+    }
+
+    /// Tohumsuz (eski/yeni) kayıt → ilk açılışta sıfırdan-farklı, KALICI tohum atanır.
+    @MainActor
+    func testFreshGameGetsStablePersistedSeed() {
+        SaveManager.wipe()
+        let first = GameModel()
+        let assigned = first.state.seed
+        XCTAssertNotEqual(assigned, 0, "Yeni oyun otomatik, sıfırdan-farklı tohum almalı")
+        // Yeniden yükle → aynı tohum (kalıcılaştırıldı, her açılışta değişmez).
+        let reloaded = GameModel()
+        XCTAssertEqual(reloaded.state.seed, assigned, "Tohum kalıcı olmalı — yeniden yüklemede değişmemeli")
     }
 }
 

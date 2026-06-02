@@ -20,12 +20,13 @@ enum ScenarioSystem {
     /// Sıradaki senaryo türünü seç: oyunun mevcut durumuna göre uygun olan(lar)dan rastgele.
     /// Aktif senaryoların tipleriyle ÇAKIŞMAZ (oyuncu aynı türden 2 kopya görmesin).
     /// İlk evrelerde (Garaj/Pre-seed) ağır/kurumsal senaryolar (uyum, yatırımcı) daha az olur.
-    static func pickKind(stage: Int, active: [ScenarioInstance]) -> ScenarioKind {
+    static func pickKind<R: RandomNumberGenerator>(stage: Int, active: [ScenarioInstance],
+                                                   using rng: inout R) -> ScenarioKind {
         let activeKinds = Set(active.map { $0.kind })
         let allKinds = ScenarioKind.allCases
             .filter { !activeKinds.contains($0.rawValue) }
             .filter { isUnlockedAtStage($0, stage: stage) }
-        return allKinds.randomElement() ?? .demoDay
+        return allKinds.randomElement(using: &rng) ?? .demoDay
     }
 
     /// Bir senaryo türü hangi evreden itibaren spawn edilebilir (gerçekçi kademeli aç).
