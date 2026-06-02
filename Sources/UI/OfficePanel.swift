@@ -16,6 +16,8 @@ private enum OfficeSubTab: String, CaseIterable { case kroki, projeler
 struct OfficePanel: View {
     @ObservedObject var model: GameModel
     var theme: Theme
+    /// Direktif şeridinin "Büyüme'ye git" gibi sekme-geçişi aksiyonları için (ContentView bağlar).
+    var onNavigate: ((GameTab) -> Void)? = nil
     @State private var showShop = false
     @State private var expanded: GoalsStrip.Detail? = nil
     @State private var subTab: OfficeSubTab = .kroki
@@ -35,8 +37,12 @@ struct OfficePanel: View {
             if subTab == .kroki {
                 ScrollView {
                     VStack(spacing: Space.s3) {
+                        // En üstte tek-ses yön: tur toplamaya hazırsa büyük yeşil CTA, değilse
+                        // "Sıradaki Adım" direktif şeridi (Faz 3 — "şimdi ne yapayım?").
                         if model.canRaise, let next = model.nextStage {
                             raiseStrip(next)
+                        } else {
+                            directiveStrip
                         }
                         FloorPlanView(model: model, theme: theme)
                         actionStrip
@@ -83,6 +89,71 @@ struct OfficePanel: View {
                 .buttonStyle(.pressable)
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Sıradaki Adım direktif şeridi (canRaise DEĞİLken)
+
+    private func directiveTint(_ tone: CausalNote.Tone) -> Color {
+        switch tone {
+        case .good: return Palette.success
+        case .warn: return Palette.warning
+        case .bad:  return Palette.danger
+        }
+    }
+
+    private var directiveStrip: some View {
+        let d = model.nextDirective
+        let c = directiveTint(d.tone)
+        return Button {
+            Haptics.tap()
+            performDirective(d.action)
+        } label: {
+            HStack(spacing: Space.s2) {
+                ZStack {
+                    Circle().fill(c.opacity(0.16)).frame(width: 32, height: 32)
+                    Image(systemName: d.icon)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(c)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("SIRADAKİ ADIM")
+                        .font(.eyebrow).kerning(0.8)
+                        .foregroundStyle(theme.subtle)
+                    Text(d.text)
+                        .font(.appText(13, .semibold))
+                        .foregroundStyle(theme.text)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                if d.action != .none {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(theme.subtle)
+                }
+            }
+            .padding(.horizontal, Space.s3).padding(.vertical, Space.s2 + 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.m))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.m)
+                    .stroke(c.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("Sıradaki adım: \(d.text)")
+    }
+
+    private func performDirective(_ action: GameModel.DirectiveAction) {
+        switch action {
+        case .raise:  model.raiseRound()
+        case .daily:  expanded = .daily
+        case .sprint: expanded = .sprint
+        case .shop:   showShop = true
+        case .growth: onNavigate?(.growth)
+        case .none:   break
         }
     }
 

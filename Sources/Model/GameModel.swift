@@ -69,6 +69,15 @@ final class GameModel: ObservableObject {
     /// Yalnızca oyuncu eylemleri (hire/buy/raise/decision) tetikler — tick'in sürekli
     /// gelir/burn akışı GÖSTERİLMEZ (gürültü olur). UI `$lastCashDelta`'yı dinler.
     @Published var lastCashDelta: CashDeltaEvent? = nil
+    /// "Çünkü" nedensellik çipi: bir eylemin/eşiğin hangi metriği NEDEN etkilediğini
+    /// anlık söyler — gizli simülasyonu HİSSE çevirir (Faz 2). UI `$pendingCausalNote`'u dinler.
+    @Published var pendingCausalNote: CausalNote? = nil
+
+    // Nedensellik eşik takibi: band kötüleşince/iyileşince bir kez çip yay (her tick değil).
+    // 0=kritik, 1=düşük/uyarı, 2=güvenli. İlk tick'te sessizce kalibre edilir (causalPrimed).
+    private var lastMoraleBand = 2
+    private var lastRunwayBand = 2
+    private var causalPrimed = false
 
     private var timer: Timer?
     private var lastTick = Date()
@@ -289,6 +298,48 @@ final class GameModel: ObservableObject {
         lastCashDelta = CashDeltaEvent(amount: amount)
     }
 
+    /// Nedensellik çipi yay: "şu oldu → şu metrik şöyle etkilendi".
+    private func emitCausal(_ icon: String, _ text: String, _ tone: CausalNote.Tone) {
+        pendingCausalNote = CausalNote(icon: icon, text: text, tone: tone)
+    }
+
+    /// Her tick (advanceEconomy sonrası) çağrılır: moral & runway band'i kötüleşince ya da
+    /// güvenliye dönünce BİR KEZ nedensellik çipi yayar. Sürekli sayı akışı değil — eşik anı
+    /// dramatize edilir, gizli zincir (moral→üretim/churn, burn→runway) görünür olur.
+    private func checkCausalThresholds() {
+        let mBand = state.morale < 35 ? 0 : (state.morale < 60 ? 1 : 2)
+        let rBand: Int = {
+            if netPerMonth >= 0 { return 2 }
+            let r = runwayMonths
+            return r < 3 ? 0 : (r < 6 ? 1 : 2)
+        }()
+        if causalPrimed {
+            if mBand < lastMoraleBand {
+                if mBand == 1 {
+                    emitCausal("face.dashed", "Moral düştü → üretim ve gelir yavaşlıyor", .warn)
+                } else {
+                    emitCausal("exclamationmark.triangle.fill",
+                               "Moral kritik → churn artıyor, ekip ayrılabilir", .bad)
+                    Feedback.warning()
+                }
+            } else if mBand > lastMoraleBand && mBand == 2 {
+                emitCausal("face.smiling", "Moral toparlandı → üretim hızlandı", .good)
+            }
+            if rBand < lastRunwayBand {
+                if rBand == 1 {
+                    emitCausal("hourglass", "Runway 6 ayın altında → gelir artır ya da gideri kıs", .warn)
+                    Feedback.warning()
+                } else if rBand == 0 {
+                    emitCausal("flame.fill", "Runway kritik (<3 ay) → acil nakit gerek", .bad)
+                    Feedback.warning()
+                }
+            }
+        }
+        lastMoraleBand = mBand
+        lastRunwayBand = rBand
+        causalPrimed = true
+    }
+
     @discardableResult
     func buyItem(_ id: Int) -> Bool {
         guard canBuyItem(id), let item = Balance.officeItem(id) else { return false }
@@ -460,7 +511,20 @@ final class GameModel: ObservableObject {
         Balance.adBudgetStepBase * Balance.salaryMultiplier(forStage: state.stage)
     }
     func changeAdBudget(by delta: Double) {
+        let before = currentCAC
         state.adBudgetPerMonth = max(0, state.adBudgetPerMonth + delta)
+        let after = currentCAC
+        // Nedensellik: reklam ↑ → doygunluk → CAC ↑ (azalan verim). Oyuncu bağı CANLI görür.
+        if delta != 0, before > 0 {
+            let pct = Int((((after - before) / before) * 100).rounded())
+            if delta > 0 && pct >= 1 {
+                emitCausal("megaphone.fill",
+                           "Reklam ↑ → CAC %\(pct) arttı (≈\(BigNumber.money(after))/kullanıcı)", .warn)
+            } else if delta < 0 && pct <= -1 {
+                emitCausal("megaphone",
+                           "Reklam ↓ → CAC %\(abs(pct)) düştü (≈\(BigNumber.money(after))/kullanıcı)", .good)
+            }
+        }
         save()
     }
     func setAdBudget(_ value: Double) {
@@ -555,6 +619,12 @@ final class GameModel: ObservableObject {
 
         setTip(NarrativeContent.onHire)
         Feedback.tap()   // işe alım geri bildirimi
+        // Nedensellik: ekip ↑ → aylık gider ↑ → runway kısalır. Bedeli anında görünür kıl.
+        let r = runwayMonths
+        let rText = r.isFinite ? "\(Int(r.rounded())) ay" : "∞"
+        emitCausal("person.fill.badge.plus",
+                   "Ekip büyüdü → aylık gider arttı, runway \(rText)",
+                   netPerMonth >= 0 ? .good : .warn)
         checkDailyCompletion()
         save()
         return true
@@ -637,6 +707,78 @@ final class GameModel: ObservableObject {
     var raiseProgress: Double {
         guard let next = nextStage, next.valuationTarget > 0 else { return 1 }
         return min(1, valuation / next.valuationTarget)
+    }
+
+    // MARK: - "Sıradaki Adım" direktifi (Faz 3: oyuncuya tek-ses yön)
+
+    /// Direktif şeridinin dokununca yönlendireceği eylem. UI bu enum'ı in-panel aksiyona
+    /// (tur topla / günlük / sprint / mağaza) ya da sekme geçişine (büyüme) çevirir.
+    enum DirectiveAction: Equatable { case raise, daily, sprint, shop, growth, none }
+
+    /// Tek satırlık öncelikli yön: "şimdi ne yapmalıyım?" sorusunu çözer. Tüm yön verisi
+    /// (runway/raise/daily/sprint/users) zaten hesaplı — burada tek önemli sese indirilir.
+    struct Directive: Equatable {
+        let icon: String
+        let text: String
+        let tone: CausalNote.Tone
+        let action: DirectiveAction
+    }
+
+    /// O an oyuncuya gösterilecek en öncelikli direktif (yukarıdan aşağı önem sırası).
+    var nextDirective: Directive {
+        // 1) Nakit krizi — her şeyin önünde.
+        if state.cash < 0 {
+            return Directive(icon: "flame.fill",
+                             text: "Nakit eksiye düştü — tur topla ya da gideri hemen kıs",
+                             tone: .bad, action: canRaise ? .raise : .growth)
+        }
+        if netPerMonth < 0 && runwayMonths < 6 {
+            return Directive(icon: "hourglass",
+                             text: "Runway \(Int(runwayMonths.rounded())) ay — gelir artır ya da maliyeti düşür",
+                             tone: .warn, action: .growth)
+        }
+        // 2) Tur toplamaya hazır.
+        if canRaise, let next = nextStage {
+            return Directive(icon: Icons.Screen.raise,
+                             text: "\(next.name) turunu topla — +\(BigNumber.money(next.raiseAmount))",
+                             tone: .good, action: .raise)
+        }
+        // 3) Günlük hedef eksik.
+        let d = dailyTaskCounts
+        if !dailyCompleted && d.total > 0 {
+            return Directive(icon: "target",
+                             text: "Günlük görevler: \(d.done)/\(d.total) — tamamla, seriyi sürdür",
+                             tone: .warn, action: .daily)
+        }
+        // 4) Sprint geride.
+        if !sprintOnTrack {
+            let sp = sprintProgress
+            let remaining = max(0, Int((sp.target - sp.done).rounded()))
+            return Directive(icon: "bolt.fill",
+                             text: "Sprint hedefi: +\(BigNumber.format(Double(remaining))) daha gerek",
+                             tone: .warn, action: .sprint)
+        }
+        // 5) Büyüme: çok az kullanıcı.
+        if state.users < 50 {
+            return Directive(icon: "person.3.fill",
+                             text: "İlk kullanıcıları çek — Büyüme'den reklam bütçesi ayır",
+                             tone: .warn, action: .growth)
+        }
+        // 6) Koltuklar dolu — ekip büyütmek için masa gerek.
+        if seatsFull {
+            return Directive(icon: "chair.fill",
+                             text: "Koltuklar dolu — Mağaza'dan masa al, ekibi büyüt",
+                             tone: .warn, action: .shop)
+        }
+        // 7) Varsayılan: sıradaki evreye ilerleme.
+        if let next = nextStage {
+            return Directive(icon: "chart.line.uptrend.xyaxis",
+                             text: "Sıradaki: \(next.name) — %\(Int(raiseProgress * 100)) yolda",
+                             tone: .good, action: .growth)
+        }
+        return Directive(icon: "trophy.fill",
+                         text: "Son evredesin — şirketini büyütmeye devam et",
+                         tone: .good, action: .none)
     }
 
     @discardableResult
@@ -1488,6 +1630,7 @@ final class GameModel: ObservableObject {
 
         advanceCohort(dt)   // canlı leaderboard: rakip skorları oyun temposuyla ilerler
         updateHealthState() // şirket sağlık durum-makinesi: state geçişlerini yakala (zincir izleme)
+        checkCausalThresholds() // Faz 2: moral/runway eşik geçişinde "çünkü" çipi yay
         maybeCloseQuarter()
         maybeCloseSprint()
         maybeSpawnScenario()    // yeni programlı senaryo aç (aralık geçtiyse)
@@ -1853,6 +1996,16 @@ final class GameModel: ObservableObject {
 struct CashDeltaEvent: Identifiable, Equatable {
     let id: UUID = UUID()
     let amount: Double
+}
+
+/// "Çünkü" nedensellik çipi payload'u — HUD altında kısa süre beliren tek satırlık
+/// neden-sonuç bildirimi. Faz 2'nin matematiğini oyuncuya HİSSETTİREN katman.
+struct CausalNote: Identifiable, Equatable {
+    enum Tone { case good, warn, bad }
+    let id: UUID = UUID()
+    let icon: String
+    let text: String
+    let tone: Tone
 }
 
 /// Programlı senaryonun deadline'ında üretilen sonuç — overlay payload'u.

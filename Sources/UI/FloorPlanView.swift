@@ -224,7 +224,18 @@ private struct ItemTile: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(6)
 
-            if occupied { occupantBadges.padding(5) }
+            // Dolu masada avatarlar hafifçe "nefes alır" — masaya item id'sine göre fazlanmış
+            // (senkron değil) → ofis canlı görünür, statik ikon-grid hissi kırılır.
+            if occupied {
+                TimelineView(.animation) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    let phase = Double(cell.itemID * 7 + cell.instance * 3)
+                    let breath = 1 + 0.035 * sin(t * 1.6 + phase)
+                    occupantBadges
+                        .scaleEffect(breath, anchor: .topTrailing)
+                        .padding(5)
+                }
+            }
         }
         // Sade nötr yüzey; dolu masa hafif accent ısısı + ince kenarlık.
         .background(
@@ -235,6 +246,21 @@ private struct ItemTile: View {
             RoundedRectangle(cornerRadius: Radius.m)
                 .stroke(occupied ? theme.accent.opacity(0.35) : theme.hairline, lineWidth: 1)
         )
+        // Dolu masada nabız atan yeşil "aktif/çalışıyor" noktası (sol-alt köşe).
+        .overlay(alignment: .bottomLeading) {
+            if occupied {
+                TimelineView(.animation) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    let pulse = 0.5 + 0.5 * sin(t * 2.2 + Double(cell.itemID))
+                    Circle()
+                        .fill(Palette.success)
+                        .frame(width: 6, height: 6)
+                        .opacity(0.4 + 0.5 * pulse)
+                        .shadow(color: Palette.success.opacity(0.6 * pulse), radius: 3)
+                        .padding(7)
+                }
+            }
+        }
     }
 
     /// Avatar yığını: en fazla 2 görünür başharf rozeti, fazlası "+N".

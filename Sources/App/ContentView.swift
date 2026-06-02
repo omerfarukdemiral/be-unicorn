@@ -83,7 +83,10 @@ struct ContentView: View {
                 ZStack(alignment: .top) {
                     Group {
                         switch tab {
-                        case .office:   OfficePanel(model: model, theme: theme)
+                        case .office:   OfficePanel(model: model, theme: theme,
+                                                    onNavigate: { newTab in
+                                                        withAnimation(Motion.snappy) { tab = newTab }
+                                                    })
                         case .team:     TeamPanel(model: model, theme: theme)
                         case .growth:   GrowthPanel(model: model, theme: theme)
                         case .modules:  ModulesPanel(model: model, theme: theme)
@@ -115,6 +118,12 @@ struct ContentView: View {
                 .padding(.leading, 110)
                 .padding(.top, 48)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .allowsHitTesting(false)
+
+            // HUD altında beliren "çünkü" nedensellik çipi (Faz 2: gizli zinciri hisse çevirir).
+            CausalChipOverlay(model: model)
+                .padding(.top, 150)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .allowsHitTesting(false)
 
             timeStateOverlay

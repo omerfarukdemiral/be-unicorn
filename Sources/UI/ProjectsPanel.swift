@@ -311,10 +311,12 @@ private struct ProjectTeamSheet: View {
             }
             .padding(Space.s4)
 
-            Text("Ürünü asıl Mühendislik geliştirir. Bu projeye atadığın kişiler olgunluğu ilerletir — kimseyi atamazsan ürün ilerlemez.")
+            Text("Ürünü asıl Mühendislik geliştirir. Bu projeye atadığın kişiler olgunluğu ilerletir — kimseyi atamazsan ürün ilerlemez. Daha çok geliştirici = daha hızlı olgunlaşma.")
                 .font(.bodyText).foregroundStyle(theme.subtle)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Space.s4).padding(.bottom, Space.s2)
+
+            buildStatusCard
 
             ScrollView {
                 VStack(spacing: Space.s2) {
@@ -325,6 +327,51 @@ private struct ProjectTeamSheet: View {
             }
         }
         .background(theme.bg.ignoresSafeArea())
+    }
+
+    /// Atamanın SONUCUNU görünür kılan durum kartı: olgunluk + inşa gücü + ETA/uyarı.
+    /// Oyuncu, geliştirici atayınca ürünün ilerlediğini (atamayınca durduğunu) anında görür.
+    @ViewBuilder private var buildStatusCard: some View {
+        if let p = project {
+            let power = model.projectBuildPower(p)
+            let builders = model.teamMembers(forProject: p.id).filter { $0.deptIndex == 0 || $0.deptIndex == 1 }.count
+            let mature = p.devProgress >= 1
+            let statusText: String = mature ? "Ürün olgun — tam gelir"
+                : power <= 0 ? "Geliştirici yok — ürün durdu"
+                : p.isLive ? "\(builders) geliştirici · olgunlaşıyor"
+                : "\(builders) geliştirici · MVP'ye \(etaToMVP(p))"
+            HStack(spacing: Space.s3) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("OLGUNLUK").font(.eyebrow).foregroundStyle(theme.subtle)
+                    Text("%\(Int(p.devProgress * 100))")
+                        .font(.appText(20, .heavy))
+                        .foregroundStyle(mature ? Palette.success : theme.accent)
+                }
+                Rectangle().fill(theme.hairline).frame(width: 1, height: 34)
+                HStack(spacing: 6) {
+                    Image(systemName: mature ? "checkmark.seal.fill" : power <= 0 ? "exclamationmark.triangle.fill" : "hammer.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text(statusText).font(.appText(12.5, .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(mature ? Palette.success : power <= 0 ? Palette.warning : theme.accent)
+                Spacer(minLength: 0)
+            }
+            .padding(Space.s3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+            .overlay(RoundedRectangle(cornerRadius: Radius.m)
+                .stroke(power <= 0 && !mature ? Palette.warning.opacity(0.4) : theme.hairline))
+            .padding(.horizontal, Space.s4).padding(.bottom, Space.s2)
+        }
+    }
+
+    private func etaToMVP(_ p: ProjectState) -> String {
+        let secs = model.projectETASeconds(p)
+        if !secs.isFinite { return "—" }
+        if secs <= 0 { return "hazır" }
+        if secs < 60 { return "~\(Int(secs))sn" }
+        return "~\(Int(secs / 60))dk"
     }
 
     private func memberRow(_ m: TeamMember) -> some View {

@@ -206,11 +206,11 @@ enum Balance {
     // pazarlama büyük ölçüde boşa gider (ARPU↓ + churn↑). Bu blok burada AYARLANIR.
     static let projectMVPThreshold: Double = 0.2
     static let productArpuFloor: Double = 0.12
-    static let productChurnPenalty: Double = 1.6
+    static let productChurnPenalty: Double = 2.0
     static let projectDevReference: Double = 2.5
     /// Birincil ürünün 0→1 tam olgunluğa referans dev gücünde kaç oyun-ayı sürdüğü
     /// (oyundaki proje kategorisi buildMonths'larının ~ortalaması; Mobil 1.5 … AI 3.0).
-    static let projectBuildMonths: Double = 2.0
+    static let projectBuildMonths: Double = 3.75
 }
 
 // =====================================================================
@@ -1505,7 +1505,8 @@ if reports.contains(where: { $0.bankrupt }) {
 // Her ay: olgunluk%, MRR, nakit, runway, churn. Garaj evresi (stage 0) tek ürün.
 
 struct EarlyRow { let m: Int; let readiness: Double; let mrr: Double; let users: Double
-                  let cash: Double; let net: Double; let churn: Double; let ad: Double }
+                  let cash: Double; let net: Double; let churn: Double; let ad: Double
+                  let ltvCac: Double }
 
 /// scenario: marketing bütçesini olgunluğa göre belirleyen kapanış. extraEng: ay 1'de
 /// eklenecek ek mühendis sayısı (inşayı hızlandırır).
@@ -1522,16 +1523,17 @@ func runEarlyGame(months: Int, extraEng: Int,
         s.months += 1
         rows.append(EarlyRow(m: m, readiness: s.productReadiness, mrr: s.mrr, users: s.users,
                              cash: s.cash, net: s.netPerMonth, churn: s.churnRate,
-                             ad: s.adBudgetPerMonth))
+                             ad: s.adBudgetPerMonth, ltvCac: s.ltvCacRatio))
     }
     return rows
 }
 
-func printEarly(_ title: String, _ rows: [EarlyRow]) {
+@discardableResult
+func printEarly(_ title: String, _ rows: [EarlyRow]) -> (minCash: Double, last: EarlyRow) {
     print("\n  --- \(title) ---")
-    print("   ay | olgunluk | MRR/ay  | kullanıcı | net/ay   | nakit    | reklam")
+    print("   ay | olgunluk | MRR/ay  | kullanıcı | net/ay   | nakit    | LTV:CAC | reklam")
     for r in rows {
-        let runwayNote = r.cash < 0 ? "  ⚠️BATIK" : ""
+        let note = r.cash < 0 ? "  ⚠️BATIK" : ""
         print("   "
             + pad("\(r.m)", 2) + " | "
             + pad(String(format: "%.0f%%", r.readiness * 100), 8) + " | "
@@ -1539,12 +1541,14 @@ func printEarly(_ title: String, _ rows: [EarlyRow]) {
             + pad(fmt(r.users), 9) + " | "
             + pad(dollars(r.net), 8) + " | "
             + pad(dollars(r.cash), 8) + " | "
-            + dollars(r.ad) + runwayNote)
+            + pad(String(format: "%.1f", r.ltvCac), 7) + " | "
+            + dollars(r.ad) + note)
     }
     let last = rows.last!
     let firstMature = rows.first(where: { $0.readiness >= 0.999 })?.m
     let minCash = rows.map { $0.cash }.min() ?? 0
-    print("   → 12.ay MRR \(dollars(last.mrr)), olgunluk %\(Int(last.readiness*100)), nakit \(dollars(last.cash)); min nakit \(dollars(minCash)); tam olgunluk: \(firstMature.map{"\($0).ay"} ?? "—")")
+    print("   → 12.ay MRR \(dollars(last.mrr)), nakit \(dollars(last.cash)); min nakit \(dollars(minCash)); tam olgunluk: \(firstMature.map{"\($0).ay"} ?? "—")")
+    return (minCash, last)
 }
 
 print("\n==========================================================")
@@ -1552,19 +1556,24 @@ print(" (ii) ÜRÜN-OLGUNLUĞU ERKEN-OYUN KALİBRASYONU")
 print("==========================================================")
 print("  Sabitler: MVP eşiği %\(Int(Balance.projectMVPThreshold*100)), ARPU taban %\(Int(Balance.productArpuFloor*100)), churn cezası ×\(Balance.productChurnPenalty), buildMonths \(Balance.projectBuildMonths)")
 
-// A) Naive: ay 1'den itibaren sabit $2k/ay reklam, ürünü umursamadan.
-printEarly("A) NAIVE — inşa etmeden hemen pazarla ($2k/ay)",
-           runEarlyGame(months: 12, extraEng: 0, adBudget: { _, _ in 2_000 }))
+// A) Naive AGRESİF: ay 1'den itibaren $7k/ay reklam, ürünü umursamadan (kullanıcının senaryosu).
+let aAgg = printEarly("A) NAIVE-AGRESİF — inşasız $7k/ay pazarlama",
+           runEarlyGame(months: 12, extraEng: 0, adBudget: { _, _ in 7_000 }))
 
 // B) Doğru (sadece kurucu): olgunluk %60'a dek reklam YOK, sonra olgunlukla rampa.
-printEarly("B) DOĞRU — önce inşa, sonra pazarla (sadece kurucu)",
-           runEarlyGame(months: 12, extraEng: 0, adBudget: { r, _ in r < 0.6 ? 0 : 1_500 * (r - 0.5) / 0.5 }))
+let bProp = printEarly("B) DOĞRU — önce inşa, sonra pazarla (sadece kurucu)",
+           runEarlyGame(months: 12, extraEng: 0, adBudget: { r, _ in r < 0.6 ? 0 : 4_000 * (r - 0.5) / 0.5 }))
 
 // C) Doğru + 1 mühendis: inşayı hızlandır (ekip yönetimi etkisi).
 printEarly("C) DOĞRU + 1 mühendis işe al (inşa hızlanır)",
-           runEarlyGame(months: 12, extraEng: 1, adBudget: { r, _ in r < 0.6 ? 0 : 1_500 * (r - 0.5) / 0.5 }))
+           runEarlyGame(months: 12, extraEng: 1, adBudget: { r, _ in r < 0.6 ? 0 : 4_000 * (r - 0.5) / 0.5 }))
 
-print("\n  YORUM: A (naive) erken pazarlama parası boşa gitmeli (MRR cılız, nakit erir);")
-print("         B/C ürün olgunlaşınca aynı/az reklamla daha sağlıklı MRR vermeli.")
-print("         Hedef: hiçbir yol 12 ayda BATIK olmamalı (bunaltıcı değil), ama A belirgin")
-print("         şekilde B/C'den zayıf olmalı (kapı anlamlı). Aksi halde sabitleri ayarla.")
+print("\n=== KALİBRASYON VERDİKTİ ===")
+print(String(format: "  Naive-agresif 12.ay nakit %@ (min %@) vs Doğru %@ (min %@)",
+             dollars(aAgg.last.cash), dollars(aAgg.minCash), dollars(bProp.last.cash), dollars(bProp.minCash)))
+let gateMeaningful = aAgg.last.cash < bProp.last.cash - 3_000   // naive belirgin daha kötü
+let notBrutal = bProp.minCash > 0                                // doğru oynayan batmaz
+print("  • Kapı anlamlı (naive belirgin kötü): \(gateMeaningful ? "EVET ✅" : "HAYIR ❌ — sertleştir")")
+print("  • Bunaltıcı değil (doğru yol batmaz): \(notBrutal ? "EVET ✅" : "HAYIR ❌ — gevşet")")
+print("  Not: erken aylarda LTV:CAC < 1 → olgunlaşmamış ürüne pazarlama para kaybettirir;")
+print("       ürün olgunlaştıkça LTV:CAC sağlıklıya (>3) çıkar. Kapının çekirdek kanıtı budur.")
