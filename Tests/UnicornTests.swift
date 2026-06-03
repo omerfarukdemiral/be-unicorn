@@ -1459,3 +1459,109 @@ final class DecisionReflectionTests: XCTestCase {
     }
 }
 
+// MARK: - Mekanik denetimi: tap-to-do + büyüme modu (blitzscale) + arketip kayması
+
+final class MechanicsAuditTests: XCTestCase {
+
+    @MainActor
+    private func playingModel(_ mutate: (inout GameState) -> Void) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.seed = 99
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        mutate(&s)
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    // --- Tap-to-do (nudgeTeam / decisionImminent) ---
+
+    @MainActor
+    func testNudgeTeamAdvancesUntilDecisionImminent() {
+        let m = playingModel { _ in }
+        XCTAssertFalse(m.decisionImminent, "Başta karar demlenmiyor")
+        var anyEffective = false
+        for _ in 0..<200 {
+            if m.nudgeTeam() { anyEffective = true }
+            if m.decisionImminent { break }
+        }
+        XCTAssertTrue(anyEffective, "En az bir dürtme sayaca etki etmeli")
+        XCTAssertTrue(m.decisionImminent, "Yeterli dürtme kararı demlenme eşiğine taşımalı")
+    }
+
+    @MainActor
+    func testNudgeTeamHasNoEffectWhenCounterFull() {
+        let m = playingModel { _ in }
+        for _ in 0..<300 { _ = m.nudgeTeam() }   // sayaç tavana dayanır
+        XCTAssertFalse(m.nudgeTeam(), "Sayaç doluyken dürtme etkisiz olmalı (false)")
+    }
+
+    @MainActor
+    func testNudgeTeamBlockedByPendingDecision() {
+        let m = playingModel { _ in }
+        guard let card = DecisionContent.all.first(where: { $0.id == "blitzscale-pressure" }) else {
+            return XCTFail("blitzscale-pressure kartı bulunamadı")
+        }
+        m.pendingEvent = card
+        XCTAssertFalse(m.nudgeTeam(), "Kart beklerken dürtme etkisiz olmalı")
+    }
+
+    // --- Büyüme modu (blitzscale vs disiplinli) ---
+
+    @MainActor
+    func testToggleGrowthModeFlipsBetweenModes() {
+        let m = playingModel { _ in }
+        XCTAssertEqual(m.growthMode, .disciplined, "Varsayılan disiplinli olmalı")
+        m.toggleGrowthMode()
+        XCTAssertEqual(m.growthMode, .blitzscale)
+        m.toggleGrowthMode()
+        XCTAssertEqual(m.growthMode, .disciplined)
+    }
+
+    @MainActor
+    func testBlitzscaleRaisesBothGrowthAndCAC() {
+        let disciplined = playingModel { s in s.users = 1_000; s.reputation = 50; s.growthMode = .disciplined }
+        let blitz = playingModel { s in s.users = 1_000; s.reputation = 50; s.growthMode = .blitzscale }
+        // Blitzscale "hızlı büyü, para yak": organik büyüme YUKARI ama edinme (CAC) da pahalanır.
+        XCTAssertGreaterThan(blitz.organicUserGrowthPerMonth, disciplined.organicUserGrowthPerMonth,
+                             "Blitzscale organik büyümeyi artırmalı")
+        XCTAssertGreaterThan(blitz.currentCAC, disciplined.currentCAC,
+                             "Blitzscale CAC'i (edinme maliyetini) artırmalı — bedeli var")
+    }
+
+    @MainActor
+    func testBlitzscalePressureCardChoiceSetsGrowthMode() {
+        guard let card = DecisionContent.all.first(where: { $0.id == "blitzscale-pressure" }) else {
+            return XCTFail("blitzscale-pressure kartı bulunamadı")
+        }
+        let m = playingModel { _ in }
+        m.pendingEvent = card
+        m.resolve(card.choices[0])   // "Blitzscale moduna geç"
+        XCTAssertEqual(m.growthMode, .blitzscale, "İlk seçenek blitzscale moduna geçirmeli")
+
+        let m2 = playingModel { _ in }
+        m2.pendingEvent = card
+        m2.resolve(card.choices[1])  // "Disiplinli tempo"
+        XCTAssertEqual(m2.growthMode, .disciplined, "İkinci seçenek disiplinli modda tutmalı")
+    }
+
+    // --- Arketip kayması (karar → kalıcı kimlik) ---
+
+    @MainActor
+    func testArchetypeShiftIsAnnouncedInFeedWhenPathForms() {
+        // Başta arketip 'unknown' (yetersiz sinyal: users<200, stage<2). Hisse %100 + reklamsız →
+        // kullanıcı eşiği aşılınca Bootstrap belirginleşir; resolve feed'e "Yolun Şekillendi" düşürür.
+        let m = playingModel { s in s.users = 0; s.adBudgetPerMonth = 0; s.founderEquity = 1.0 }
+        let card = DecisionCard("t-arch", category: .product, speaker: "Test", icon: "x",
+                                prompt: "p",
+                                choices: [DecisionChoice("kullanıcı çek", effects: [.users(300)], result: "r")])
+        m.pendingEvent = card
+        m.resolve(card.choices[0])
+        XCTAssertTrue(m.feedEntries.contains { $0.title.contains("Yolun") },
+                      "Arketip belirginleşince feed'e görünür iz düşmeli")
+    }
+}
+
