@@ -1288,3 +1288,59 @@ final class PeakMetricsTests: XCTestCase {
     }
 }
 
+// MARK: - Faz 2: Nedensellik akışı (gizli simülasyonu HİSSETTİR)
+//
+// Eylem/olay → metrik etkisi "çünkü" çipiyle (pendingCausalNote) görünür olur.
+final class CausalityTests: XCTestCase {
+
+    @MainActor
+    private func model(_ mutate: (inout GameState) -> Void) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.seed = 7
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        mutate(&s)
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    @MainActor
+    func testFireEmitsCausalNote() {
+        let m = model { s in
+            s.cash = 50_000
+            s.headcount = [2, 0, 0, 0, 0, 0]
+            s.members = [
+                TeamMember(firstName: "Ada", lastName: "Y", deptIndex: 0, skillLevel: 5,
+                           joinedMonth: 0, isFounder: true),
+                TeamMember(firstName: "Bora", lastName: "K", deptIndex: 0, skillLevel: 2,
+                           joinedMonth: 1, isFounder: false),
+            ]
+        }
+        XCTAssertTrue(m.fire(0), "Departmanda kurucu-olmayan üye varken fire başarılı olmalı")
+        XCTAssertNotNil(m.pendingCausalNote, "İşten çıkarma bir çünkü-çipi yaymalı")
+        XCTAssertTrue(m.pendingCausalNote?.text.contains("Ekip küçüldü") ?? false,
+                      "Fire çipi 'ekip küçüldü → gider düştü' nedenselliğini taşımalı")
+    }
+
+    @MainActor
+    func testProjectGoingLiveEmitsGrowthCausal() {
+        let m = model { s in
+            let proj = ProjectState(name: "Atlas", category: 0, startMonth: 0,
+                                    devProgress: Balance.projectMVPThreshold - 0.02, isLive: false)
+            s.projects = [proj]
+            s.headcount = [1, 0, 0, 0, 0, 0]
+            s.members = [TeamMember(firstName: "Ada", lastName: "Y", deptIndex: 0, skillLevel: 5,
+                                    joinedMonth: 0, isFounder: true, assignedProjectID: proj.id)]
+        }
+        // Atanmış mühendisle birkaç ay ilerlet → proje MVP'yi geçer, yayına girer.
+        m.advanceProjects(2.0)
+        XCTAssertTrue(m.state.projects[0].isLive, "Atanmış ekiple proje MVP'yi geçip yayına girmeli")
+        XCTAssertNotNil(m.pendingCausalNote, "Yayına geçiş bir çünkü-çipi yaymalı")
+        XCTAssertTrue(m.pendingCausalNote?.text.contains("yayında") ?? false,
+                      "Proje çipi 'yayında → büyüme/ARPU' nedenselliğini taşımalı")
+    }
+}
+

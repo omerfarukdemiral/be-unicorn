@@ -694,6 +694,12 @@ final class GameModel: ObservableObject {
         state.headcount[i] -= 1
         state.morale = max(0, state.morale - 6)        // işten çıkarma morali bozar
         state.reputation = max(0, state.reputation - 2)
+        // Nedensellik: ekip ↓ → aylık gider ↓ → runway uzar (hire'ın simetriği; moral bedeli var).
+        let r = runwayMonths
+        let rText = r.isFinite ? "\(Int(r.rounded())) ay" : "∞"
+        emitCausal("person.fill.badge.minus",
+                   "Ekip küçüldü → aylık gider düştü, runway \(rText)",
+                   netPerMonth >= 0 ? .good : .warn)
         save()
         return true
     }
@@ -1001,8 +1007,13 @@ final class GameModel: ObservableObject {
         case .promote:
             move = "seni ligde geçti görünce kopya özellik + yetenek avıyla karşılık veriyor"
         }
-        state.rivalMoveLabel = "\(rivalName): \(move)"
-        pushFeed(.rival, "Rakip Tepki Verdi", "\(rivalName) \(move). Bir süre CAC ve churn baskısı artacak — karar kartıyla yanıt verebilirsin.",
+        // Şiddet (0..1 → %) + bu baskının CAC/churn'e tavanlı etkisi → opak değil, somut.
+        let intensity = Int((state.rivalAggression * 100).rounded())
+        let cacUp = Int((state.rivalAggression * Balance.rivalCacPressureMax * 100).rounded())
+        let churnUp = Int((state.rivalAggression * Balance.rivalChurnPressureMax * 100).rounded())
+        state.rivalMoveLabel = "\(rivalName) (\(sectorName)): \(move) — %\(intensity) baskı"
+        pushFeed(.rival, "Rakip Tepki Verdi",
+                 "\(rivalName) (\(sectorName)) \(move). Baskı %\(intensity) — CAC ~+%\(cacUp), churn ~+%\(churnUp). Karar kartıyla yanıt verebilirsin.",
                  positive: false, mechanic: "marketing")
         Feedback.warning()
     }
@@ -2199,6 +2210,12 @@ final class GameModel: ObservableObject {
                 state.morale = min(100, state.morale + Balance.projectLaunchMoraleBonus)
                 state.reputation = min(100, state.reputation + Balance.projectLaunchReputationBonus)
                 pendingToast = "\(state.projects[i].name) yayında! Geliştirdikçe geliri büyür."
+                // Nedensellik: ürün olgunlaştı → gizli büyüme/ARPU katkısını görünür kıl.
+                let g = Int((cat?.growthBonus ?? 0) * 100)
+                let a = Int((cat?.arpuBonus ?? 0) * 100)
+                emitCausal("chart.line.uptrend.xyaxis",
+                           "\(state.projects[i].name) yayında → organik büyüme +%\(g) · ARPU +%\(a)",
+                           .good)
             }
         }
     }

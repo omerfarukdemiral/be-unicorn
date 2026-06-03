@@ -23,6 +23,7 @@
 | Post-mortem + NG+ (iflas-izi, nedensel ölüm zinciri) | ✅ `PostMortemView` + Anlamlı İflas |
 | **Öğrenme döngüsü — hata-tetikli dersler** (Faz 5) | ✅ `evaluateLessonTriggers`, kilitli Defter, 20 ders açılış yolu |
 | **Post-mortem zirve metrikleri (Faz 4)** | ✅ `peakUsers/MRR/Valuation/Reputation` + "kaç ay dayandın" başlıkta |
+| **Nedensellik akışı + rakip detayı (Faz 2 UX)** | ✅ fire çipi, proje-canlı büyüme/ARPU çipi, rakip baskı şiddeti%+CAC/churn etkisi |
 | Deterministik seed (replay/test/balans-sim) (Faz 0) | ✅ `SplitMix64RNG` + `state.seed` |
 | Idle/offline ilerleme | ✅ `applyOfflineProgress` (8sa tavan) |
 | Kalıcılık (migration-proof save) | ✅ `SaveManager` |
@@ -33,13 +34,13 @@
 
 ## 🟡 Oyun-İçi Eksikler — yapılacaklar (öncelikli)
 
-### P1 — Hissi/anlamı doğrudan artıran, küçük-orta
+### P1 — Hissi/anlamı doğrudan artıran, küçük-orta — ✅ TAMAMLANDI (2026-06-03)
 
-| # | Eksik | Neden önemli | Tahmini iş | Dokunulacak |
-|---|-------|--------------|:---:|---|
-| 1 | **Nedensellik akışı (Faz 2 UX)** — "çünkü" çipleri yalnız moral/runway eşik geçişinde yayılıyor; reklam→CAC, ekip→burn→runway, ürün-olgunlaşma, rakip-baskı sessiz | Gizli simülasyonu oyuncu HİSSETMELİ — brief'in ruhu | Orta | `GameModel.checkCausalThresholds` + ~4 emit noktası |
-| 2 | **Rakip-baskı detayı** — feed'de "Rakip tepki verdi" var ama nedeni (fiyat savaşı / yetenek avı) ve şiddeti (0..1) gösterilmiyor | Antagonist hissi yarım; baskı opak | Küçük | `updateRivalAggression`, feed metni |
-| ~~3~~ | ~~**Post-mortem zirve metrikleri (Faz 4)**~~ → ✅ **YAPILDI** (2026-06-03): peakUsers/MRR/Valuation/Reputation + "kaç ay dayandın" + zirve bölümü | — | — | — |
+| # | Eksik | Durum |
+|---|-------|---|
+| ~~1~~ | ~~Nedensellik akışı (Faz 2 UX)~~ | ✅ Keşifte görüldü: reklam→CAC ve ekip→burn→runway (hire) ZATEN vardı. Eklenenler: **fire çipi** (hire simetriği) + **proje-canlı çipi** (organik büyüme +%X · ARPU +%Y) |
+| ~~2~~ | ~~Rakip-baskı detayı~~ | ✅ Anlatı+isim+sektör zaten vardı; eklenen: **baskı şiddeti %** + **CAC ~+%X / churn ~+%Y** etkisi (feed + `rivalMoveLabel`) |
+| ~~3~~ | ~~Post-mortem zirve metrikleri (Faz 4)~~ | ✅ peakUsers/MRR/Valuation/Reputation + "kaç ay dayandın" + zirve bölümü |
 
 ### P2 — Onboarding & geri-dönüş cilası, küçük
 
