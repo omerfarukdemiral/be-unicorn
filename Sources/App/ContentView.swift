@@ -386,6 +386,13 @@ struct ContentView: View {
             OnboardingOverlay(model: model, theme: theme)
         } else if !model.companySetupComplete {
             CompanySetupOverlay(model: model, theme: theme)
+        } else if model.shouldShowFirstGoalSplash {
+            // Faz 3: kuruluş sonrası bir kez — "şimdi şunu yap" ilk hedef yönlendirmesi.
+            FirstGoalSplash(model: model, theme: theme)
+        } else if let report = model.pendingOfflineReport {
+            // Faz 6: anlamlı yokluk sonrası "tekrar hoş geldin" özeti.
+            OfflineReportView(theme: theme, report: report,
+                              dismiss: { model.pendingOfflineReport = nil })
         } else if model.pendingBankruptcy {
             BankruptcyView(model: model, theme: theme)
         } else if model.pendingWin {

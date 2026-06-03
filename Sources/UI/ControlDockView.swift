@@ -28,7 +28,8 @@ struct ControlDockView: View {
             Spacer(minLength: Space.s2)
             seasonChip
             Spacer(minLength: Space.s2)
-            circleButton(icon: "book.closed.fill", tint: theme.accent, label: "Defter") {
+            circleButton(icon: "book.closed.fill", tint: theme.accent, label: "Defter",
+                         badgeCount: model.state.newLessonIds.count) {
                 Haptics.selection(); lessonsOpen = true
             }
             circleButton(icon: "gearshape.fill", tint: Palette.textSecondary, label: "Ayarlar") {
@@ -119,6 +120,7 @@ struct ControlDockView: View {
     // MARK: - Yardımcı: dairesel ikon buton (defter · ayar)
 
     private func circleButton(icon: String, tint: Color, label: String,
+                              badgeCount: Int = 0,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
@@ -128,9 +130,21 @@ struct ControlDockView: View {
                 .frame(width: 34, height: 34)
                 .background(theme.surfaceHigh, in: Circle())
                 .overlay(Circle().stroke(theme.hairline, lineWidth: 1))
+                // "YENİ ders" rozeti: sağ-üstte sayı çipi; Defter açılınca markLessonsSeen temizler.
+                .overlay(alignment: .topTrailing) {
+                    if badgeCount > 0 {
+                        Text("\(min(badgeCount, 9))")
+                            .font(.appNumber(10, .heavy))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Circle().fill(Palette.danger))
+                            .overlay(Circle().stroke(theme.surfaceElevated, lineWidth: 1.5))
+                            .offset(x: 5, y: -5)
+                    }
+                }
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel(label)
+        .accessibilityLabel(badgeCount > 0 ? "\(label), \(badgeCount) yeni" : label)
     }
 
     private func updateGlow() {

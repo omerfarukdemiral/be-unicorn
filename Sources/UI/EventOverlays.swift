@@ -324,3 +324,64 @@ struct OfflineReportView: View {
         }
     }
 }
+
+/// Faz 3 — kuruluş sonrası BİR KEZ: oyuncuya net "ilk hedef"i (nextDirective) vurgulu
+/// kart olarak gösterir, "Başla" ile kapanır. Oyun bu sırada zaten duraklı. "Sıradaki Adım"
+/// şeridine işaret eder → yön duygusu (onboarding, brief Faz 3).
+struct FirstGoalSplash: View {
+    @ObservedObject var model: GameModel
+    var theme: Theme
+    @State private var appeared = false
+
+    var body: some View {
+        let d = model.nextDirective
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+            VStack(spacing: Space.s3) {
+                HStack(spacing: Space.s2) {
+                    Image(systemName: "flag.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(theme.accent)
+                    Text("İlk Hedefin").font(.titleM).foregroundStyle(theme.text)
+                }
+                Text("Şirketin kuruldu. Başlamak için net bir adım:")
+                    .font(.bodyText).foregroundStyle(theme.subtle)
+                    .multilineTextAlignment(.center)
+                HStack(spacing: Space.s2) {
+                    Image(systemName: d.icon)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(theme.accent)
+                        .frame(width: 34, height: 34)
+                        .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.s))
+                    Text(d.text)
+                        .font(.appText(14, .semibold)).foregroundStyle(theme.text)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(Space.s3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+                Text("Bu yön her zaman üstteki “Sıradaki Adım” şeridinde durur.")
+                    .font(.appText(11, .medium)).foregroundStyle(theme.subtle)
+                    .multilineTextAlignment(.center)
+                Button { Haptics.tap(); dismiss() } label: {
+                    Text("Başla").font(.bodyL)
+                        .modifier(AppButton.primary(theme, glow: false))
+                }
+                .buttonStyle(.pressable)
+            }
+            .padding(Space.s5).frame(maxWidth: 340)
+            .background(theme.surfaceLow, in: RoundedRectangle(cornerRadius: Radius.overlay))
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 8)
+            .padding(.horizontal, Space.s6)
+            .scaleEffect(appeared ? 1 : 0.85).opacity(appeared ? 1 : 0)
+        }
+        .onAppear { withAnimation(Motion.snappy) { appeared = true } }
+    }
+
+    private func dismiss() {
+        withAnimation(Motion.quick) { appeared = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { model.completeFirstGoalSplash() }
+    }
+}

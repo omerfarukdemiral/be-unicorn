@@ -2009,6 +2009,11 @@ final class GameModel: ObservableObject {
     // MARK: - Şirket kuruluşu (CEO + şirket + sektör + ilk proje)
 
     var companySetupComplete: Bool { state.profile.setupComplete }
+
+    /// Faz 3: kuruluş bitti ama "ilk hedef" splash'ı henüz gösterilmedi → bir kez göster.
+    var shouldShowFirstGoalSplash: Bool { companySetupComplete && !state.hasSeenFirstGoalSplash }
+    func completeFirstGoalSplash() { state.hasSeenFirstGoalSplash = true; save() }
+
     var companyName: String { state.profile.companyName }
     var founderFullName: String { state.profile.founderFullName }
     /// Kurucu ünvanı evreyle yükselir (Hacker → Kurucu → CEO ...).
@@ -2270,6 +2275,10 @@ final class GameModel: ObservableObject {
         pushFeed(.offline, "Yokken Neler Oldu",
                  "\(timeText) yoktun. Nakit \(dCash >= 0 ? "+" : "")\(BigNumber.money(dCash)) · Kullanıcı +\(BigNumber.format(max(0, dUsers))).",
                  positive: dCash >= 0)
+        // Anlamlı yoklukta belirgin "tekrar hoş geldin" modalı (UI zaten kurulu: OfflineReportView).
+        if elapsed >= Balance.offlineReportMinSeconds {
+            pendingOfflineReport = OfflineReport(seconds: elapsed, cashDelta: dCash, usersDelta: dUsers)
+        }
     }
 }
 

@@ -24,6 +24,9 @@
 | **Öğrenme döngüsü — hata-tetikli dersler** (Faz 5) | ✅ `evaluateLessonTriggers`, kilitli Defter, 20 ders açılış yolu |
 | **Post-mortem zirve metrikleri (Faz 4)** | ✅ `peakUsers/MRR/Valuation/Reputation` + "kaç ay dayandın" başlıkta |
 | **Nedensellik akışı + rakip detayı (Faz 2 UX)** | ✅ fire çipi, proje-canlı büyüme/ARPU çipi, rakip baskı şiddeti%+CAC/churn etkisi |
+| **Onboarding ilk-hedef splash (Faz 3)** | ✅ `FirstGoalSplash` — kuruluş sonrası bir kez, `nextDirective`'i gösterir |
+| **Welcome-back ekranı (Faz 6)** | ✅ `OfflineReportView` bağlandı (1sa+ yoklukta), eşik `offlineReportMinSeconds` |
+| **Defter "yeni ders" rozeti** | ✅ ControlDock Defter butonunda `newLessonIds` sayaç rozeti |
 | Deterministik seed (replay/test/balans-sim) (Faz 0) | ✅ `SplitMix64RNG` + `state.seed` |
 | Idle/offline ilerleme | ✅ `applyOfflineProgress` (8sa tavan) |
 | Kalıcılık (migration-proof save) | ✅ `SaveManager` |
@@ -42,13 +45,13 @@
 | ~~2~~ | ~~Rakip-baskı detayı~~ | ✅ Anlatı+isim+sektör zaten vardı; eklenen: **baskı şiddeti %** + **CAC ~+%X / churn ~+%Y** etkisi (feed + `rivalMoveLabel`) |
 | ~~3~~ | ~~Post-mortem zirve metrikleri (Faz 4)~~ | ✅ peakUsers/MRR/Valuation/Reputation + "kaç ay dayandın" + zirve bölümü |
 
-### P2 — Onboarding & geri-dönüş cilası, küçük
+### P2 — Onboarding & geri-dönüş cilası — ✅ TAMAMLANDI (2026-06-03)
 
-| # | Eksik | Neden önemli | Tahmini iş | Dokunulacak |
-|---|-------|--------------|:---:|---|
-| 4 | **Onboarding ilk-hedef splash (Faz 3)** — kuruluş sonrası "şimdi şunu yap: ilk çalışanı al" yönlendirmesi yok | İlk 60 sn kritik; yön duygusu | Küçük | `GameModel.pendingToast` + ContentView |
-| 5 | **Welcome-back ekranı (Faz 6)** — offline dönüş sadece feed'de; belirgin "yokken neler oldu" kartı yok | Geri-dönüş anına anlatısal kapanış | Küçük (~30 dk) | Yeni overlay + foreground tetikleyici |
-| 6 | **Defter "yeni ders" rozeti** — açılan ders feed'e düşüyor ama Defter butonunda sayaç/rozet yok | Oyuncu yeni dersi kaçırmasın | Küçük | `ControlDockView` + `newLessonIds.count` |
+| # | Eksik | Durum |
+|---|-------|---|
+| ~~4~~ | ~~Onboarding ilk-hedef splash (Faz 3)~~ | ✅ `FirstGoalSplash` overlay: kuruluş sonrası bir kez `nextDirective`'i "İlk Hedefin" olarak gösterir; `hasSeenFirstGoalSplash` bayrağı |
+| ~~5~~ | ~~Welcome-back ekranı (Faz 6)~~ | ✅ Keşif: `OfflineReportView`+struct+`pendingOfflineReport` ZATEN kuruluydu — sadece bağlandı (1sa+ eşik `offlineReportMinSeconds`) |
+| ~~6~~ | ~~Defter "yeni ders" rozeti~~ | ✅ ControlDock Defter butonunda `newLessonIds` sayaç rozeti; Defter açılınca `markLessonsSeen` temizler |
 
 ### P3 — İçerik/ses derinliği
 

@@ -1344,3 +1344,66 @@ final class CausalityTests: XCTestCase {
     }
 }
 
+// MARK: - P2: Onboarding splash + Welcome-back + Defter rozeti
+final class P2PolishTests: XCTestCase {
+
+    @MainActor
+    private func playingModel(_ mutate: (inout GameState) -> Void) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.seed = 99
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        mutate(&s)
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    // --- Onboarding ilk-hedef splash ---
+
+    @MainActor
+    func testFirstGoalSplashShownAfterSetupThenDismissedPersists() throws {
+        let m = playingModel { _ in }
+        XCTAssertTrue(m.shouldShowFirstGoalSplash, "Kuruluş sonrası ilk-hedef splash'ı gösterilmeli")
+        m.completeFirstGoalSplash()
+        XCTAssertFalse(m.shouldShowFirstGoalSplash, "Görüldükten sonra tekrar gösterilmemeli")
+        XCTAssertTrue(m.state.hasSeenFirstGoalSplash)
+        // Kalıcı: kayıt/yükleme sonrası flag korunur.
+        let data = try JSONEncoder().encode(m.state)
+        let decoded = try JSONDecoder().decode(GameState.self, from: data)
+        XCTAssertTrue(decoded.hasSeenFirstGoalSplash, "Splash bayrağı kalıcı olmalı")
+    }
+
+    @MainActor
+    func testFirstGoalSplashNotShownBeforeSetup() {
+        SaveManager.wipe()
+        let m = GameModel()   // kuruluş yapılmamış (setupComplete=false)
+        XCTAssertFalse(m.companySetupComplete)
+        XCTAssertFalse(m.shouldShowFirstGoalSplash, "Kuruluş bitmeden splash gösterilmemeli")
+    }
+
+    // --- Welcome-back (offline dönüş özeti) ---
+
+    @MainActor
+    func testWelcomeBackReportSurfacedAfterLongAbsence() {
+        let m = playingModel { s in
+            s.hasSeenFirstGoalSplash = true            // dönen oyuncu (yeni değil)
+            s.cash = 40_000; s.users = 500
+            s.lastSaved = Date(timeIntervalSinceNow: -7_200)   // 2 saat önce
+        }
+        XCTAssertNotNil(m.pendingOfflineReport, "1 saatten uzun yoklukta 'tekrar hoş geldin' modalı çıkmalı")
+        XCTAssertGreaterThan(m.pendingOfflineReport?.seconds ?? 0, 3_600)
+    }
+
+    @MainActor
+    func testWelcomeBackNotShownForShortAbsence() {
+        let m = playingModel { s in
+            s.hasSeenFirstGoalSplash = true
+            s.lastSaved = Date(timeIntervalSinceNow: -300)    // 5 dakika önce (eşik altı)
+        }
+        XCTAssertNil(m.pendingOfflineReport, "Kısa yoklukta modal çıkmamalı (feed yeter)")
+    }
+}
+

@@ -268,6 +268,8 @@ enum Balance {
     // Offline
     static let offlineCapSeconds: Double = 8 * 3600
     static let offlineEfficiency: Double = 0.5
+    /// "Tekrar hoş geldin" modalı yalnız anlamlı yokluklarda çıkar (altında feed yeter).
+    static let offlineReportMinSeconds: Double = 3600   // 1 saat
 
     // Karar olayları
     // Aralık: bir kart kapandıktan sonra yenisi gelir (oyun-zamanı; hızla ölçeklenir).

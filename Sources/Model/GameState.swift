@@ -57,6 +57,9 @@ struct GameState: Codable {
     var peakValuation: Double = 0
     var peakReputation: Double = 0
 
+    // Faz 3 — kuruluş sonrası BİR KEZ gösterilen "ilk hedef" splash'ı görüldü mü.
+    var hasSeenFirstGoalSplash: Bool = false
+
     // Funding evresi (meta)
     var stage: Int = 0
     var stageReached: Int = 0          // ulaşılan en yüksek evre (kalıcı)
@@ -213,6 +216,7 @@ struct GameState: Codable {
         peakMRR = g(.peakMRR, 0)
         peakValuation = g(.peakValuation, 0)
         peakReputation = g(.peakReputation, 0)
+        hasSeenFirstGoalSplash = g(.hasSeenFirstGoalSplash, false)
         stage = g(.stage, 0)
         stageReached = g(.stageReached, 0)
         seenEventIDs = g(.seenEventIDs, [String]())
