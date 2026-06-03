@@ -456,8 +456,17 @@ final class GameModel: ObservableObject {
     /// Reklamsız, kelime-ağızdan + pazarlama ekibi + viral organik büyüme.
     /// Yayındaki projeler büyümeye oransal katkı verir (portföy etkisi).
     var organicUserGrowthPerMonth: Double {
-        marketingPower * 30 * (1 + effects.growthMult + projectGrowthMult) * (0.5 + state.reputation / 100)
+        let base = marketingPower * 30 * (1 + effects.growthMult + projectGrowthMult) * (0.5 + state.reputation / 100)
             + state.users * Balance.viralFactor * (state.reputation / 50)
+        return base * growthModeGrowthMult   // blitzscale tempoyu yükseltir (disiplinli = nötr)
+    }
+
+    /// Büyüme modu çarpanları — disiplinli nötr (1.0), blitzscale "hızlı büyü, para yak".
+    private var growthModeGrowthMult: Double {
+        state.growthMode == .blitzscale ? Balance.blitzscaleGrowthMult : 1.0
+    }
+    private var growthModeCacMult: Double {
+        state.growthMode == .blitzscale ? Balance.blitzscaleCacMult : 1.0
     }
 
     /// O anki müşteri edinme maliyeti ($/kullanıcı). Harcama ölçeğiyle artar (doygunluk),
@@ -467,7 +476,8 @@ final class GameModel: ObservableObject {
         let absorb = Balance.marketingAbsorption * (1 + marketingPower * 0.4)
         let saturation = 1 + state.adBudgetPerMonth / max(1, absorb)
         // Tepki Veren Rakip: fiyat savaşı baskısı CAC'i geçici/tavanlı yukarı çeker.
-        return Balance.baseCAC * stageMult * saturation / qualityFactor * rivalCacMultiplier
+        // Blitzscale modu edinmeyi pahalandırır (gaza basmanın bedeli); disiplinli nötr.
+        return Balance.baseCAC * stageMult * saturation / qualityFactor * rivalCacMultiplier * growthModeCacMult
     }
 
     /// Reklam bütçesinin satın aldığı aylık yeni kullanıcı.
@@ -1537,11 +1547,62 @@ final class GameModel: ObservableObject {
         }
     }
 
+    /// Tap-to-do: oyuncu ofiste ÇALIŞAN bir masaya dokununca "ekibi dürtükler" — bir sonraki
+    /// karara kalan süreyi `tapDecisionNudgeSeconds` kadar kısaltır. Pasif idle döngüsüne
+    /// aktif bir dokunma ritmi katar; ama 15 sn gerçek-zaman tabanı (maybeTriggerDecision)
+    /// dokunulmaz kalır → spam kart yağmuru yapmaz. Etki olduysa true döner (UI geri-bildirimi
+    /// + haptik için). Bir overlay açıkken / kart zaten beklerken / sayaç doluyken false.
+    @discardableResult
+    func nudgeTeam() -> Bool {
+        guard pendingEvent == nil, !anyBlockingOverlay else { return false }
+        guard sinceDecision < nextDecisionAt else { return false }   // zaten hazır — dürtmenin etkisi yok
+        sinceDecision = min(nextDecisionAt, sinceDecision + Balance.tapDecisionNudgeSeconds)
+        objectWillChange.send()
+        return true
+    }
+
+    /// Affordance: bir sonraki karar "demleniyor" mu (sayaç hedefin son %15'inde). UI bu sinyalle
+    /// çalışan masaları hafifçe parlatır → oyuncu dokunmanın yaklaşan bir şeyi hızlandırdığını sezer.
+    var decisionImminent: Bool {
+        pendingEvent == nil && !anyBlockingOverlay && sinceDecision >= nextDecisionAt * 0.85
+    }
+
+    // MARK: - Büyüme modu (blitzscale vs disiplinli) — kalıcı strateji kaldıracı
+
+    /// Büyüme modunu ayarla — KALICI tempo tercihi. GrowthPanel toggle'ı çağırır. announce=true
+    /// ise feed'e görünür bir iz düşer (oyuncu eyleminin geri-bildirimi).
+    func setGrowthMode(_ mode: GrowthMode, announce: Bool = true) {
+        guard state.growthMode != mode else { return }
+        state.growthMode = mode
+        state.modeSelectedAtMonth = state.months
+        if announce {
+            pushFeed(.milestone, "Büyüme Modu: \(mode.title)", mode.blurb, positive: true)
+        }
+        objectWillChange.send()
+        save()
+    }
+
+    /// İki mod arasında geçiş (GrowthPanel düğmesi).
+    func toggleGrowthMode() {
+        setGrowthMode(state.growthMode == .blitzscale ? .disciplined : .blitzscale)
+    }
+
+    var growthMode: GrowthMode { state.growthMode }
+
     func resolve(_ choice: DecisionChoice) {
         guard let card = pendingEvent else { return }
+        let archBefore = currentArchetype   // C3: karar SONRASI kimlik kaymasını yakalamak için
         for effect in choice.effects { apply(effect) }
         if card.once || !state.seenEventIDs.contains(card.id) {
             state.seenEventIDs.append(card.id)
+        }
+        // Blitzscale-baskısı kartı: seçim KALICI büyüme modunu belirler (1. seçenek = blitzscale,
+        // 2. = disiplinli). Tek seferlik değil — sonradan GrowthPanel'den değiştirilebilir; bu yalnız
+        // ilk yönelimi state'e yazar. resultLine zaten açıkladığı için ayrı feed notu eklemiyoruz.
+        if card.id == "blitzscale-pressure",
+           let idx = card.choices.firstIndex(where: { $0.label == choice.label }) {
+            state.growthMode = (idx == 0) ? .blitzscale : .disciplined
+            state.modeSelectedAtMonth = state.months
         }
 
         // #6 (D1): seçimin gecikmeli etkilerini zaman-damgalı kuyruğa al.
@@ -1571,6 +1632,21 @@ final class GameModel: ObservableObject {
             pushFeed(.decision, "Kararın Sonucu", line,
                      positive: true, mechanic: card.category.lessonMechanic,
                      reflection: reflection)
+        }
+        // C3: bu karar kurucu yolunu (runtime arketip) hareket ettirdiyse görünür kıl —
+        // "anlamlı seçim → kalıcı kimlik" bağını oyun BOYUNCA hissettir (sadece oyun-sonu Karne'de değil).
+        let archAfter = currentArchetype
+        if archAfter != .unknown, archAfter != archBefore {
+            maybeDetectArchetype()   // sticky değeri hemen kalıcılaştır (HUD kapsülü gecikmesin)
+            if archBefore == .unknown {
+                pushFeed(.milestone, "Yolun Şekillendi",
+                         "Kararların bir desen oluşturdu: \(archAfter.title). \(archAfter.blurb)",
+                         positive: true)
+            } else {
+                pushFeed(.milestone, "Yolun Değişti",
+                         "\(archBefore.title) → \(archAfter.title). \(archAfter.blurb)",
+                         positive: true)
+            }
         }
         if wasFirstDecision {
             pendingToast = NarrativeContent.firstDecisionPraise   // ilk-karar tebriği kısa toast (tek sefer)

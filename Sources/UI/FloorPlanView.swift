@@ -99,7 +99,12 @@ struct FloorPlanView: View {
                         let row = idx / cols
                         let col = idx % cols
                         ItemTile(cell: cell, theme: theme, size: cellSize,
-                                 occupants: seated[idx] ?? [])
+                                 occupants: seated[idx] ?? [],
+                                 imminent: model.decisionImminent,
+                                 onTap: {
+                                     // Tap-to-do: çalışan masaya dokun → ekibi dürtükle, kararı öne çek.
+                                     if model.nudgeTeam() { Haptics.selection() } else { Haptics.tap() }
+                                 })
                             .frame(width: cellSize, height: cellSize)
                             .offset(x: CGFloat(col) * (cellSize + spacing),
                                     y: CGFloat(row) * (cellSize + spacing) + 6)
@@ -114,7 +119,25 @@ struct FloorPlanView: View {
 
             // Doluluk bar'ı.
             occupancyBar(usage: usage)
+
+            // Tap-to-do ipucu — yalnız ekip oturmuşken, sade bir fısıltı.
+            if !cells.isEmpty && !model.state.members.isEmpty {
+                tapHint
+            }
         }
+    }
+
+    /// Çalışan masalara dokunmanın ne işe yaradığını anlatan ince ipucu satırı.
+    private var tapHint: some View {
+        HStack(spacing: Space.s1) {
+            Image(systemName: "hand.tap.fill")
+                .font(.system(size: 9, weight: .semibold))
+            Text("Çalışan masalara dokun → ekibi dürtükle, kararı öne çek")
+                .font(.appText(10, .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(theme.subtle)
     }
 
     /// Tuval genişliğini ölçüp `canvasWidth`'e yazan görünmez arka plan.
@@ -197,12 +220,35 @@ private struct ItemTile: View {
     let size: CGFloat
     /// Bu koltuğu sahiplenen üyeler (en fazla seatCapacity adet). Avatarlar üst sağ köşede.
     var occupants: [TeamMember] = []
+    /// Bir sonraki karar "demleniyor" mu — dolu masa accent parıltısıyla dokunmaya davet eder.
+    var imminent: Bool = false
+    /// Tap-to-do: çalışan masaya dokunma eylemi (nil ise masa dekoratif kalır).
+    var onTap: (() -> Void)? = nil
+
+    @State private var tapPulse = false
 
     private var catColor: Color { Color(hex: cell.def.category.colorHex) }
     /// Bu masada biri oturuyor mu — dolu masa "canlı" (parlak), boş masa sönük görünür.
     private var occupied: Bool { !occupants.isEmpty }
+    /// Yalnızca çalışan masalar dürtüklenebilir (boş eşya/dekorasyon dokunmaz).
+    private var tappable: Bool { occupied && onTap != nil }
 
     var body: some View {
+        tileBody
+            .contentShape(RoundedRectangle(cornerRadius: Radius.m))
+            .scaleEffect(tapPulse ? 0.93 : 1)
+            .animation(Motion.snappy, value: tapPulse)
+            .onTapGesture {
+                guard tappable else { return }
+                onTap?()
+                withAnimation(Motion.snappy) { tapPulse = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    withAnimation(Motion.snappy) { tapPulse = false }
+                }
+            }
+    }
+
+    private var tileBody: some View {
         ZStack(alignment: .topTrailing) {
             // Sade tek-ton: ikon accent (renk yarışı yok), kategori sadece küçük nokta.
             VStack(spacing: 4) {
@@ -237,15 +283,18 @@ private struct ItemTile: View {
                 }
             }
         }
-        // Sade nötr yüzey; dolu masa hafif accent ısısı + ince kenarlık.
+        // Sade nötr yüzey; dolu masa hafif accent ısısı + ince kenarlık. Karar demlenirken
+        // (imminent) çalışan masalar bir tık daha parlar → dokunmaya sessiz davet.
         .background(
             RoundedRectangle(cornerRadius: Radius.m)
-                .fill(occupied ? theme.accent.opacity(0.08) : Color.white.opacity(0.03))
+                .fill(occupied ? theme.accent.opacity(imminent ? 0.16 : 0.08) : Color.white.opacity(0.03))
         )
         .overlay(
             RoundedRectangle(cornerRadius: Radius.m)
-                .stroke(occupied ? theme.accent.opacity(0.35) : theme.hairline, lineWidth: 1)
+                .stroke(occupied ? theme.accent.opacity(imminent ? 0.6 : 0.35) : theme.hairline,
+                        lineWidth: occupied && imminent ? 1.5 : 1)
         )
+        .animation(Motion.smooth, value: imminent)
         // Dolu masada nabız atan yeşil "aktif/çalışıyor" noktası (sol-alt köşe).
         .overlay(alignment: .bottomLeading) {
             if occupied {

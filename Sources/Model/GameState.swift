@@ -1,5 +1,41 @@
 import Foundation
 
+/// Büyüme stratejisi modu — oyuncunun seçtiği KALICI tempo tercihi ("hızlı büyü, para yak" vs
+/// "kârlı ve yavaş"). İlk kez "blitzscale-pressure" karar kartıyla set edilir, sonra
+/// GrowthPanel'den serbestçe değiştirilebilir. String rawValue → migration-proof (eski/bilinmeyen
+/// değer disciplined'a düşer). Suçlamasız: iki yol da Unicorn'a çıkar, sadece patikası farklı.
+enum GrowthMode: String, Codable, CaseIterable {
+    case disciplined = "disciplined"   // kârlı-yavaş, sürdürülebilir (nötr ekonomik taban)
+    case blitzscale  = "blitzscale"    // hızlı büyü, para yak
+
+    var title: String {
+        switch self {
+        case .disciplined: return "Disiplinli Tempo"
+        case .blitzscale:  return "Blitzscale"
+        }
+    }
+    var short: String {
+        switch self {
+        case .disciplined: return "Disiplinli"
+        case .blitzscale:  return "Blitzscale"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .disciplined: return "tortoise.fill"
+        case .blitzscale:  return "hare.fill"
+        }
+    }
+    var blurb: String {
+        switch self {
+        case .disciplined:
+            return "Kârlı ve sürdürülebilir büyü. Runway'i korur, ekip dinç kalır — yavaş ama sağlam patika."
+        case .blitzscale:
+            return "Pazarı kapmak için gaza bas. Daha çok kullanıcı, daha hızlı — ama edinme pahalanır, nakit hızlı yanar."
+        }
+    }
+}
+
 /// Kaydedilebilir oyun durumu. Saf veri — mantık GameModel'de.
 struct GameState: Codable {
     /// Şema sürümü — gelecekte alan eklenip/değişince migration zinciri için.
@@ -172,6 +208,8 @@ struct GameState: Codable {
     var feedUnread: Int = 0   // HUD okunmamış rozeti (Ofis'e dönünce sıfırlanır)
     var founderLeaning: Int = FounderLeaning.balanced.rawValue      // A1: kuruluşta beyan edilen eğilim (mekanik etki yok)
     var detectedArchetype: String = FounderArchetype.unknown.rawValue  // C3: runtime tespit edilen arketip
+    var growthMode: GrowthMode = .disciplined   // büyüme tempo modu (blitzscale vs disiplinli) — KALICI seçim
+    var modeSelectedAtMonth: Double = -1         // modun en son seçildiği oyun-ayı (-1 = hiç seçilmedi)
 
     init() {
         headcount = Array(repeating: 0, count: Balance.departmentCount)
@@ -274,6 +312,8 @@ struct GameState: Codable {
         currency = g(.currency, Currency.usd)
         founderLeaning = g(.founderLeaning, FounderLeaning.balanced.rawValue)
         detectedArchetype = g(.detectedArchetype, FounderArchetype.unknown.rawValue)
+        growthMode = g(.growthMode, GrowthMode.disciplined)
+        modeSelectedAtMonth = g(.modeSelectedAtMonth, -1)
         feed = g(.feed, [FeedEntry]())
         feedUnread = g(.feedUnread, 0)
         // Feature3 (Tepki Veren Rakip) — EN SON eklenir (çakışma/sıra kuralı).

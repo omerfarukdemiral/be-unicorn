@@ -9,6 +9,7 @@ struct GrowthPanel: View {
         ScrollView {
             VStack(spacing: Space.s3) {
                 header
+                growthModeCard
                 budgetCard
                 metricsGrid
                 healthNote
@@ -29,6 +30,68 @@ struct GrowthPanel: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Kalıcı büyüme modu kaldıracı — "hızlı büyü, para yak" (blitzscale) vs "kârlı-yavaş"
+    /// (disiplinli). İki yol da Unicorn'a çıkar; seçim Organik/ay + CAC metriklerini canlı oynatır.
+    /// İlk yönelim "blitzscale-pressure" karar kartıyla gelir, buradan serbestçe değiştirilebilir.
+    private var growthModeCard: some View {
+        PanelCard(theme: theme) {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                HStack(spacing: Space.s1) {
+                    Image(systemName: "dial.medium.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(theme.accent)
+                    Text("Büyüme Modu")
+                        .font(.appText(13, .semibold))
+                        .foregroundStyle(theme.subtle)
+                    Spacer()
+                }
+                HStack(spacing: Space.s2) {
+                    ForEach(GrowthMode.allCases, id: \.self) { mode in
+                        modeButton(mode)
+                    }
+                }
+                Text(model.growthMode.blurb)
+                    .font(.appText(11.5, .medium))
+                    .foregroundStyle(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func modeButton(_ mode: GrowthMode) -> some View {
+        let selected = model.growthMode == mode
+        return Button {
+            guard !selected else { return }
+            Haptics.selection()
+            withAnimation(Motion.smooth) { model.setGrowthMode(mode) }
+        } label: {
+            HStack(spacing: Space.s1) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 13, weight: .bold))
+                Text(mode.short)
+                    .font(.appText(13, .bold))
+            }
+            .foregroundStyle(selected ? .white : theme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Space.s2 + 2)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
+                        .fill(theme.accent.opacity(0.92))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
+                            .stroke(.white.opacity(0.18)))
+                } else {
+                    RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
+                        .stroke(theme.hairline)
+                }
+            }
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("\(mode.title)\(selected ? ", seçili" : "")")
     }
 
     private var budgetCard: some View {

@@ -15,6 +15,7 @@ struct HUDView: View {
     @State private var pulse = false
     @State private var cashPop: CGFloat = 1
     @State private var showLeaderboard = false
+    @State private var showArchetypeInfo = false
 
     private var negative: Bool { model.cash < 0 }
     private var net: Double { model.netPerMonth }
@@ -97,7 +98,7 @@ struct HUDView: View {
         }
     }
 
-    /// Eyebrow satırı — kurucu ilk adı (gold) + evre (accent), tek satır.
+    /// Eyebrow satırı — kurucu ilk adı (gold) + evre (accent) + stratejik yönelim kapsülü, tek satır.
     private var eyebrowRow: some View {
         HStack(spacing: 4) {
             if let founder = model.founderMember, !founder.firstName.isEmpty {
@@ -107,10 +108,63 @@ struct HUDView: View {
             }
             Text(model.currentStage.name.uppercased())
                 .foregroundStyle(theme.accent)
+            archetypeChip
         }
         .font(.eyebrow).kerning(0.8)
         .lineLimit(1)
+        .minimumScaleFactor(0.75)
         .fixedSize(horizontal: false, vertical: false)
+    }
+
+    /// Stratejik yönelim (runtime arketip) — kararların kurucu kimliğini OYUN BOYUNCA görünür
+    /// kılar. `.unknown` (erken oyun) iken gizli. Tap → suçlamasız blurb popover'ı. Arketip
+    /// değiştiğinde feed'e "Yolun Değişti" düşer (GameModel.resolve); bu kapsül o anı kalıcı taşır.
+    @ViewBuilder private var archetypeChip: some View {
+        let arch = model.currentArchetype
+        if arch != .unknown {
+            Button {
+                Haptics.tap(); showArchetypeInfo = true
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: arch.icon)
+                        .font(.system(size: 8, weight: .bold))
+                    Text(arch.title)
+                        .font(.appText(8.5, .bold)).kerning(0.3)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(theme.accent)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(theme.accent.opacity(0.12), in: Capsule())
+                .overlay(Capsule().stroke(theme.accent.opacity(0.32), lineWidth: 1))
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel("Stratejik yönelim: \(arch.title)")
+            .popover(isPresented: $showArchetypeInfo) {
+                archetypeInfoCard(arch)
+                    .presentationCompactAdaptation(.popover)
+            }
+        }
+    }
+
+    /// Arketip detayı — ikon + başlık + suçlamasız blurb (popover içeriği).
+    private func archetypeInfoCard(_ arch: FounderArchetype) -> some View {
+        VStack(alignment: .leading, spacing: Space.s2) {
+            HStack(spacing: Space.s2) {
+                Image(systemName: arch.icon)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(theme.accent)
+                Text(arch.title)
+                    .font(.titleM)
+                    .foregroundStyle(theme.text)
+            }
+            Text(arch.blurb)
+                .font(.bodyText)
+                .foregroundStyle(theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Space.s4)
+        .frame(width: 260)
+        .background(theme.surfaceElevated)
     }
 
     /// Dairesel kurucu avatarı — 46pt, accent halkalı, sağ-alt lig tier rozeti, tap → leaderboard.

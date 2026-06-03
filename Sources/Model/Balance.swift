@@ -280,6 +280,10 @@ enum Balance {
     static let decisionMaxInterval: Double = 80
     /// Yüksek hızda bile iki karar arası en az bu kadar GERÇEK saniye geçmeli (kart yağmuru engeli).
     static let decisionMinRealSeconds: Double = 15
+    /// Tap-to-do: oyuncu ofiste çalışan bir masaya dokununca bir sonraki karara kalan süre
+    /// bu kadar OYUN-saniyesi kısalır ("ekibi dürtükle"). 15 sn gerçek-zaman tabanı korunur →
+    /// çok dokunmak bile kart yağmuru yapmaz, sadece oyuncuya tempo üzerinde aktif kontrol verir.
+    static let tapDecisionNudgeSeconds: Double = 8
 
     // MARK: Kriz can-simidi (P0-1 ölüm-spirali düzeltmesi)
     // Runway bu eşiğin ALTINA düşünce karar kartı seçimi MUTLAKA crisis kategorisinden olur
@@ -572,6 +576,13 @@ enum Balance {
     static let cacStageScaling: Double = 1.30 // CAC evreyle artar (kanallar doyar, rekabet artar)
                                               // Stage 5 → $7 × 3.71 ≈ $26 (gerçek SaaS Series C: $50-300 aralığı).
     static let marketingAbsorption: Double = 5_000 // 1 birim pazarlama-gücü bu kadar reklam harcamasını verimli yutar
+
+    // MARK: Büyüme modu (blitzscale vs disiplinli) — KASITLI olarak HAFİF çarpanlar.
+    // Disiplinli = nötr taban (1.0). Blitzscale teması "hızlı büyü, para yak": organik büyüme
+    // bir miktar artar ama edinme (CAC) pahalanır → daha çok kullanıcı + daha hızlı nakit yanışı.
+    // Ekonomi kalibrasyonunu bozmamak için %15/%12 ile sınırlı; tek ayardan tune edilir.
+    static let blitzscaleGrowthMult: Double = 1.15   // blitzscale organik büyüme çarpanı
+    static let blitzscaleCacMult: Double    = 1.12   // blitzscale CAC (edinme maliyeti) çarpanı
     static let adBudgetStepBase: Double = 500 // bütçe ayar adımı tabanı (evreyle ölçeklenir)
 
     // MARK: Sektörler (kuruluş — kurgu/lezzet)
