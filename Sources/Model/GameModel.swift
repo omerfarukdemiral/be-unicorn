@@ -1670,6 +1670,17 @@ final class GameModel: ObservableObject {
         rng = SplitMix64RNG(seed: seed == 0 ? 1 : seed)
     }
 
+    // MARK: - Faz 4: Zirve metrik takibi (post-mortem "ne başardın")
+
+    /// Bu denemenin zirvelerini monotonik max ile güncelle. İflasta post-mortem,
+    /// final değil ZİRVE değerleri gösterir → kayıp anına gurur/karşıtlık katar.
+    private func updatePeaks() {
+        if state.users > state.peakUsers { state.peakUsers = state.users }
+        let m = mrr;       if m > state.peakMRR { state.peakMRR = m }
+        let v = valuation; if v > state.peakValuation { state.peakValuation = v }
+        if state.reputation > state.peakReputation { state.peakReputation = state.reputation }
+    }
+
     // MARK: - Faz 5: Hata-tetikli ders açılımı ("önce hata, sonra ders")
 
     /// Her tick: oyuncu ilgili HATAYI yaşadıysa ilgili Defter dersini O AN açar.
@@ -1841,6 +1852,7 @@ final class GameModel: ObservableObject {
 
         let monthFraction = dt / Balance.secondsPerMonth
         advanceEconomy(monthFraction)
+        updatePeaks()                    // Faz 4: bu denemenin zirve metriklerini izle (post-mortem)
         maybeCelebrateUserMilestone()    // HZ-2: ilk 100/1000 kullanıcı eşik kutlaması (bir kez)
         maybeDetectArchetype()           // C3: runtime arketibi gerçek duruma göre güncelle (yapışkan)
         advanceProjects(monthFraction)   // geliştirilen projeler ilerler, biten yayına girer
@@ -2234,6 +2246,7 @@ final class GameModel: ObservableObject {
         state.cash += dCash
         state.users = max(0, state.users + dUsers)
         state.months += monthFraction
+        updatePeaks()   // Faz 4: çevrimdışı büyüme de zirveye yansısın
         // Track C: "yokken neler oldu" → AKIŞA (engellemeyen özet).
         let h = Int(elapsed) / 3600, m = (Int(elapsed) % 3600) / 60
         let timeText = h > 0 ? "\(h)sa \(m)dk" : "\(m)dk"

@@ -29,6 +29,7 @@ struct PostMortemView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: Space.s4) {
                         header
+                        peaksSection
                         causalChainSection
                         miniCharts
                         diagnosticsSection
@@ -74,8 +75,40 @@ struct PostMortemView: View {
                 .foregroundStyle(theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            // Hayatta kalma süresi — belirgin: bu denemenin en somut "skoru".
+            (Text("\(monthsSurvived) ay").font(.appNumber(22, .heavy)).foregroundStyle(theme.text)
+             + Text(" dayandın").font(.appText(14, .semibold)).foregroundStyle(theme.subtle))
+                .padding(.top, Space.s1)
         }
         .padding(.bottom, Space.s1)
+    }
+
+    /// Bu denemede kaç oyun-ayı hayatta kalındı (en az 1 — sıfır ay garip görünür).
+    private var monthsSurvived: Int { max(1, Int(model.state.months)) }
+
+    // MARK: - Zirve metrikleri — "ne battı" değil "ne başardın": kayıp anına karşıtlık.
+
+    private var peaksSection: some View {
+        VStack(alignment: .leading, spacing: Space.s2) {
+            HStack(spacing: Space.s2) {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Palette.gold)
+                Text("ZİRVE NOKTALARIN")
+                    .font(.caption).kerning(0.8)
+                    .foregroundStyle(theme.subtle)
+            }
+            HStack(spacing: Space.s4) {
+                statCell(label: "Zirve Kullanıcı", value: BigNumber.format(model.state.peakUsers),
+                         icon: "person.2.fill", tint: theme.accent)
+                statCell(label: "Zirve MRR", value: BigNumber.money(model.state.peakMRR),
+                         icon: "dollarsign.circle.fill", tint: Palette.gold)
+                statCell(label: "Zirve Değerleme", value: BigNumber.money(model.state.peakValuation),
+                         icon: "chart.line.uptrend.xyaxis", tint: theme.accent)
+            }
+            .padding(Space.s3)
+            .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+        }
     }
 
     // MARK: - Zincirleme nedensellik — şirketi öldüren tek cümlelik nedensel zincir.

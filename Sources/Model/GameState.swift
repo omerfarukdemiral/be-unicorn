@@ -50,6 +50,13 @@ struct GameState: Codable {
     var unlockedLessons: [String] = []
     var newLessonIds: [String] = []
 
+    // Faz 4 — bu denemenin ZİRVE metrikleri (post-mortem'de "ne başardın" anı). Her tick
+    // monotonik max ile güncellenir; yeni oyun/restart taze GameState ile 0'dan başlar.
+    var peakUsers: Double = 0
+    var peakMRR: Double = 0
+    var peakValuation: Double = 0
+    var peakReputation: Double = 0
+
     // Funding evresi (meta)
     var stage: Int = 0
     var stageReached: Int = 0          // ulaşılan en yüksek evre (kalıcı)
@@ -202,6 +209,10 @@ struct GameState: Codable {
         adBudgetPerMonth = g(.adBudgetPerMonth, 0)
         unlockedLessons = g(.unlockedLessons, [String]())
         newLessonIds = g(.newLessonIds, [String]())
+        peakUsers = g(.peakUsers, 0)
+        peakMRR = g(.peakMRR, 0)
+        peakValuation = g(.peakValuation, 0)
+        peakReputation = g(.peakReputation, 0)
         stage = g(.stage, 0)
         stageReached = g(.stageReached, 0)
         seenEventIDs = g(.seenEventIDs, [String]())

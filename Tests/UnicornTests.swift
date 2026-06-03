@@ -1233,3 +1233,58 @@ final class LessonUnlockTests: XCTestCase {
     }
 }
 
+// MARK: - Faz 4: Zirve metrik takibi (post-mortem "ne başardın")
+//
+// Her tick monotonik max ile peakUsers/peakMRR/peakValuation/peakReputation güncellenir;
+// iflasta post-mortem final değil ZİRVE değerleri gösterir.
+final class PeakMetricsTests: XCTestCase {
+
+    @MainActor
+    private func peakModel(_ mutate: (inout GameState) -> Void) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.seed = 4242
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        mutate(&s)
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    @MainActor
+    func testPeaksAreMonotonicMaxAndPositive() {
+        let m = peakModel { s in s.users = 500; s.adBudgetPerMonth = 8_000 }
+        m.advanceMonthsHeadless(6)
+        // Zirve, tanım gereği canlı değerin altında olamaz (monotonik max).
+        XCTAssertGreaterThanOrEqual(m.state.peakUsers, m.state.users, "Zirve kullanıcı >= final")
+        XCTAssertGreaterThanOrEqual(m.state.peakReputation, m.state.reputation, "Zirve itibar >= final")
+        XCTAssertGreaterThan(m.state.peakUsers, 0)
+        XCTAssertGreaterThan(m.state.peakMRR, 0, "Kullanıcı + ARPU varken zirve MRR > 0")
+        XCTAssertGreaterThan(m.state.peakValuation, 0)
+    }
+
+    @MainActor
+    func testPeakExceedsFinalAfterCollapse() {
+        // Hızlı çöküş: az nakit + yüksek reklam → kullanıcı/değer düşer; zirve erken yüksek noktayı tutar.
+        let m = peakModel { s in s.cash = 1_000; s.adBudgetPerMonth = 30_000; s.users = 2_000 }
+        let peakBefore = m.state.peakUsers
+        m.advanceMonthsHeadless(4)
+        XCTAssertGreaterThan(m.state.peakUsers, 0)
+        XCTAssertGreaterThanOrEqual(m.state.peakUsers, peakBefore)
+        XCTAssertGreaterThanOrEqual(m.state.peakUsers, m.state.users,
+                                    "Düşüşte bile zirve, final değerin altına inmez")
+    }
+
+    @MainActor
+    func testPeaksSurviveCodableRoundTrip() throws {
+        let m = peakModel { s in s.users = 500; s.adBudgetPerMonth = 8_000 }
+        m.advanceMonthsHeadless(3)
+        let savedPeak = m.state.peakUsers
+        let data = try JSONEncoder().encode(m.state)
+        let decoded = try JSONDecoder().decode(GameState.self, from: data)
+        XCTAssertEqual(decoded.peakUsers, savedPeak, "Zirve metrikleri kayıt/yükleme sonrası korunmalı")
+    }
+}
+
