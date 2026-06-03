@@ -44,6 +44,12 @@ struct GameState: Codable {
     // Pazarlama: aylık reklam/kullanıcı-edinme bütçesi (oyuncu ayarlar)
     var adBudgetPerMonth: Double = 0
 
+    // Faz 5 — "önce hata, sonra ders": oyuncu ilgili hatayı yaşadığında Defter dersi açılır.
+    // `unlockedLessons`: açılmış ders id'leri (kalıcı koleksiyon). `newLessonIds`: açıldı ama
+    // henüz Defter'de görülmedi → "YENİ" rozeti; Defter açılınca temizlenir.
+    var unlockedLessons: [String] = []
+    var newLessonIds: [String] = []
+
     // Funding evresi (meta)
     var stage: Int = 0
     var stageReached: Int = 0          // ulaşılan en yüksek evre (kalıcı)
@@ -194,6 +200,8 @@ struct GameState: Codable {
         moduleLevels = g(.moduleLevels, Array(repeating: 0, count: Balance.modules.count))
         ownedItems = g(.ownedItems, [Int: Int]())
         adBudgetPerMonth = g(.adBudgetPerMonth, 0)
+        unlockedLessons = g(.unlockedLessons, [String]())
+        newLessonIds = g(.newLessonIds, [String]())
         stage = g(.stage, 0)
         stageReached = g(.stageReached, 0)
         seenEventIDs = g(.seenEventIDs, [String]())

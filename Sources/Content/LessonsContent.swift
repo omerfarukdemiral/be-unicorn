@@ -241,6 +241,37 @@ enum LessonsContent {
     static func lesson(for mechanic: String) -> LessonEntry? {
         all.first { $0.mechanic == mechanic }
     }
+
+    static func lesson(id: String) -> LessonEntry? {
+        all.first { $0.id == id }
+    }
+
+    /// Faz 5 — "önce hata, sonra ders": her dersin KİLİDİ hangi oyun-durumuyla açılır
+    /// (Kurucu Defteri'nde kilitli kartta gösterilen ipucu). Eşik mantığı GameModel'de
+    /// (`evaluateLessonTriggers`); buradaki metin yalnızca oyuncuya yön gösterir.
+    /// Her ders bir açılış yoluna sahip olmalı — yoksa içerik kalıcı gizli kalır.
+    static let unlockHint: [String: String] = [
+        "default-alive":             "Runway 3 ayın altına düşsün (para yakarken)",
+        "runway-half-truth":         "Runway 6 ayın altına insin",
+        "burn-is-velocity":          "Aylık gider, gelirinin 2 katını aşsın",
+        "ltv-cac-3x":                "LTV:CAC 3'ün altına insin (zarardayken)",
+        "churn-silent-killer":       "Aylık churn belirgin yükselsin",
+        "premature-scaling":         "Az kullanıcıyla (200 altı) ekibi büyüt",
+        "organic-vs-paid":           "Reklam bütçesi toplam giderin yarısını geçsin",
+        "pmf-feel":                  "100 kullanıcıya ulaş",
+        "do-things-that-dont-scale": "İlk aylarda 50 kullanıcının altında kal",
+        "feature-vs-product":        "İkinci bir projeyi başlat",
+        "pricing-captures-value":    "200+ kullanıcın olsun ama aylık gelir düşük kalsın",
+        "hire-slow-fire-fast":       "İlk çalışanını işe al",
+        "morale-compounds":          "Moral 35'in altına düşsün",
+        "ten-x-myth":                "Ekip 6 kişiye ulaşsın",
+        "equity-not-valuation":      "Kurucu hissen %70'in altına insin",
+        "safe-deferred-dilution":    "Kurucu hissen %50'nin altına insin",
+        "no-single-path":            "Seed evresine ulaş",
+        "focus-says-no":             "Aynı anda 3 proje yürüt",
+        "failure-is-data":           "İlk iflasını yaşa",
+        "ride-the-trough":           "Orta oyunda moral + büyüme birlikte düşsün",
+    ]
 }
 
 extension DecisionCategory {

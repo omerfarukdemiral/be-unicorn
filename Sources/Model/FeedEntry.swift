@@ -39,7 +39,7 @@ struct FeedEntry: Codable, Identifiable, Equatable {
 
 /// Feed girdisinin görsel kimliği (ikon + nötr tint). rawValue Codable-stabil.
 enum FeedKind: Int, Codable {
-    case info = 0, quarter, sprint, daily, scenario, decision, delayed, milestone, season, offline, funding, rival
+    case info = 0, quarter, sprint, daily, scenario, decision, delayed, milestone, season, offline, funding, rival, lesson
     var icon: String {
         switch self {
         case .info:      return "sparkles"
@@ -54,6 +54,25 @@ enum FeedKind: Int, Codable {
         case .offline:   return "moon.zzz.fill"
         case .funding:   return "dollarsign.circle.fill"
         case .rival:     return "bolt.shield.fill"
+        case .lesson:    return "book.fill"
+        }
+    }
+    /// Detay-sheet tür rozeti için okunur etiket.
+    var label: String {
+        switch self {
+        case .info:      return "Bilgi"
+        case .quarter:   return "Çeyrek"
+        case .sprint:    return "Sprint"
+        case .daily:     return "Günlük"
+        case .scenario:  return "Senaryo"
+        case .decision:  return "Karar"
+        case .delayed:   return "Gecikmeli"
+        case .milestone: return "Kilometre Taşı"
+        case .season:    return "Sezon"
+        case .offline:   return "Çevrimdışı"
+        case .funding:   return "Yatırım"
+        case .rival:     return "Rakip"
+        case .lesson:    return "Ders"
         }
     }
 }

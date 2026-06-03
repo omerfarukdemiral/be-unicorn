@@ -63,36 +63,22 @@ struct ContentView: View {
 
     private var theme: Theme { Theme(model: model) }
 
-    var body: some View {
-        ZStack {
-            // Ana içerik: HUD + sekme paneli. (Zemin/aurora artık sibling DEĞİL → .background;
-            // böylece bu ZStack üst safe-area'ya saygı duyar, HUD Dynamic Island'ın ALTINDA
-            // başlar. Eskiden ignoresSafeArea'lı bg sibling'ı tüm ZStack'i safe-area dışına
-            // taşırıp HUD'u island ile çakıştırıyordu.)
-            VStack(spacing: 0) {
-                HUDView(model: model, theme: theme)
-                    .padding(.horizontal, Space.s3)
-                    // Dynamic Island'a nefes payı: kart safe-area dibinde adayla öpüşmesin.
-                    .padding(.top, Space.s4)
-                    .padding(.bottom, Space.s2)
-                    .offset(y: introAppeared ? 0 : -40)
-                    .opacity(introAppeared ? 1 : 0)
-                    .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.05),
-                               value: introAppeared)
+    /// Ana içerik sütunu (HUD + aktif sekme paneli + toast). body'den ayrıldı —
+    /// tek parça body type-checker'ın bütçesini aşıyordu (derleme zaman aşımı).
+    private var mainColumn: some View {
+        VStack(spacing: 0) {
+            HUDView(model: model, theme: theme)
+                .padding(.horizontal, Space.s3)
+                // Dynamic Island'a nefes payı: kart safe-area dibinde adayla öpüşmesin.
+                .padding(.top, Space.s4)
+                .padding(.bottom, Space.s2)
+                .offset(y: introAppeared ? 0 : -40)
+                .opacity(introAppeared ? 1 : 0)
+                .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.05),
+                           value: introAppeared)
 
-                ZStack(alignment: .top) {
-                    Group {
-                        switch tab {
-                        case .office:   OfficePanel(model: model, theme: theme,
-                                                    onNavigate: { newTab in
-                                                        withAnimation(Motion.snappy) { tab = newTab }
-                                                    })
-                        case .team:     TeamPanel(model: model, theme: theme)
-                        case .growth:   GrowthPanel(model: model, theme: theme)
-                        case .modules:  ModulesPanel(model: model, theme: theme)
-                        case .stats:    StatsPanel(model: model, theme: theme)
-                        }
-                    }
+            ZStack(alignment: .top) {
+                activePanel
                     .padding(.horizontal, Space.s3)
                     .id(tab)
                     .transition(.opacity.combined(with: .offset(y: 6)))
@@ -101,15 +87,38 @@ struct ContentView: View {
                     .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(0.1),
                                value: introAppeared)
 
-                    if let tt = topToast {
-                        toastView(tt)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .padding(.top, Space.s1)
-                            .padding(.trailing, Space.s4)
-                    }
+                if let tt = topToast {
+                    toastView(tt)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, Space.s1)
+                        .padding(.trailing, Space.s4)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Aktif sekmenin paneli — switch'i body'den çıkarmak tip-çıkarımını hızlandırır.
+    @ViewBuilder private var activePanel: some View {
+        switch tab {
+        case .office:   OfficePanel(model: model, theme: theme,
+                                    onNavigate: { newTab in
+                                        withAnimation(Motion.snappy) { tab = newTab }
+                                    })
+        case .team:     TeamPanel(model: model, theme: theme)
+        case .growth:   GrowthPanel(model: model, theme: theme)
+        case .modules:  ModulesPanel(model: model, theme: theme)
+        case .stats:    StatsPanel(model: model, theme: theme)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            // Ana içerik: HUD + sekme paneli. (Zemin/aurora artık sibling DEĞİL → .background;
+            // böylece bu ZStack üst safe-area'ya saygı duyar, HUD Dynamic Island'ın ALTINDA
+            // başlar. Eskiden ignoresSafeArea'lı bg sibling'ı tüm ZStack'i safe-area dışına
+            // taşırıp HUD'u island ile çakıştırıyordu.)
+            mainColumn
 
             // (Defter artık HUD'da sabit buton — yüzen chip kaldırıldı, örtüşme yok.)
 
@@ -168,7 +177,10 @@ struct ContentView: View {
         // arkasında kalıp aksiyon butonu erişilemiyordu. overlay tüm frame'i (inset dahil) kaplar.
         .overlay { overlays }
         .sheet(isPresented: $lessonsOpen) {
-            LessonsPanel(theme: theme, onClose: { lessonsOpen = false })
+            LessonsPanel(theme: theme,
+                         unlocked: Set(model.state.unlockedLessons),
+                         newIds: Set(model.state.newLessonIds),
+                         onClose: { model.markLessonsSeen(); lessonsOpen = false })
                 .presentationBackground(.clear)
         }
         .sheet(isPresented: $settingsOpen) {

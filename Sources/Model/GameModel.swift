@@ -26,7 +26,9 @@ final class GameModel: ObservableObject {
     // Track C: feed satırından zengin detay-sheet açabilmek için son scorecard payload cache'i.
     var lastCycleReview: CycleReview? = nil
     var lastSeasonFinale: SeasonFinale? = nil
-    @Published var inspectedMechanic: String? = nil       // #19: ℹ/metrik/sonuç → ilgili Defter dersi
+    @Published var inspectedMechanic: String? = nil {     // #19: ℹ/metrik/sonuç → ilgili Defter dersi
+        didSet { if let m = inspectedMechanic { unlockLessonByMechanic(m) } } // köprüyle görülen ders Defter'de de açılsın
+    }
 
     /// B1: bu oyunda en çok dokunulan ilk 3 karar mekaniği (frekansa göre azalan;
     /// eşitlikte mechanic adına göre stabil sıralı). FounderScorecardData ile 'en
@@ -1668,6 +1670,76 @@ final class GameModel: ObservableObject {
         rng = SplitMix64RNG(seed: seed == 0 ? 1 : seed)
     }
 
+    // MARK: - Faz 5: Hata-tetikli ders açılımı ("önce hata, sonra ders")
+
+    /// Her tick: oyuncu ilgili HATAYI yaşadıysa ilgili Defter dersini O AN açar.
+    /// Eşikler ekonomi formüllerini DEĞİŞTİRMEZ (yalnızca öğretici katman). Idempotent:
+    /// `!contains` guard'ı her dersi bir kez açar → pause/save/reload güvenli.
+    /// Her dersin bir açılış yolu vardır (LessonsContent.unlockHint ile birebir) —
+    /// yoksa kilitli kart kalıcı gizli kalırdı.
+    private func evaluateLessonTriggers() {
+        // Runway / nakit
+        unlockLessonIf("default-alive",   runwayMonths < 3 && netPerMonth < 0)
+        unlockLessonIf("runway-half-truth", runwayMonths < 6)
+        unlockLessonIf("burn-is-velocity", burnPerMonth > revenuePerMonth * 2 && burnPerMonth > 0)
+        // Büyüme / birim ekonomisi
+        unlockLessonIf("ltv-cac-3x",       ltvCacRatio > 0 && ltvCacRatio < 3 && netPerMonth < 0)
+        unlockLessonIf("churn-silent-killer", churnRate > Balance.lessonHighChurn)
+        unlockLessonIf("organic-vs-paid",  state.adBudgetPerMonth > 0 && state.adBudgetPerMonth > burnPerMonth * 0.5)
+        unlockLessonIf("premature-scaling", state.users < 200 && state.members.count >= 5)
+        // Ürün / fiyat
+        unlockLessonIf("pmf-feel",         state.users >= 100)
+        unlockLessonIf("do-things-that-dont-scale", state.months > 1.5 && state.users < 50)
+        unlockLessonIf("feature-vs-product", state.projects.count >= 2)
+        unlockLessonIf("focus-says-no",    state.projects.count >= 3)
+        unlockLessonIf("pricing-captures-value", state.users > 200 && mrr < 1000)
+        // Ekip / moral
+        unlockLessonIf("hire-slow-fire-fast", state.members.count >= 2)
+        unlockLessonIf("ten-x-myth",       state.members.count >= 6)
+        unlockLessonIf("morale-compounds", state.morale < 35)
+        unlockLessonIf("ride-the-trough",  state.months > 6 && state.morale < 50 && netUserGrowthPerMonth < 5)
+        // Hisse / strateji / psikoloji
+        unlockLessonIf("equity-not-valuation",   state.founderEquity < 0.7)
+        unlockLessonIf("safe-deferred-dilution", state.founderEquity < 0.5)
+        unlockLessonIf("no-single-path",   state.stage >= 2)
+        unlockLessonIf("failure-is-data",  state.bankruptcies >= 1)
+    }
+
+    private func unlockLessonIf(_ id: String, _ condition: Bool) {
+        guard condition, !state.unlockedLessons.contains(id) else { return }
+        unlockLesson(id)
+    }
+
+    /// Dersi aç: koleksiyona ekle, "YENİ" işaretle. `notify` true ise akışa bildir + haptik
+    /// (hata-tetikli açılım). Köprüyle (karar sonucu/scorecard'dan ders görüntüleme) açılırken
+    /// notify=false → sessizce koleksiyona eklenir (oyuncu zaten dersi okuyor).
+    private func unlockLesson(_ id: String, notify: Bool = true) {
+        guard !state.unlockedLessons.contains(id) else { return }
+        state.unlockedLessons.append(id)
+        if !state.newLessonIds.contains(id) { state.newLessonIds.append(id) }
+        if notify, let lesson = LessonsContent.lesson(id: id) {
+            pushFeed(.lesson, "Yeni Ders: \(lesson.title)",
+                     "Yaşadığın durumun arkasındaki ilke Defter'de açıldı.",
+                     positive: true, mechanic: lesson.mechanic)
+            Feedback.success()
+        }
+        save()
+    }
+
+    /// Köprüyle görüntülenen dersi (mechanic eşleşmesi) sessizce koleksiyona ekle —
+    /// böylece Defter'de kilitli "???" olarak kalmaz (tutarlılık).
+    private func unlockLessonByMechanic(_ mechanic: String) {
+        guard let lesson = LessonsContent.lesson(for: mechanic) else { return }
+        unlockLesson(lesson.id, notify: false)
+    }
+
+    /// Kurucu Defteri açıldığında "YENİ" rozetlerini temizle (görüldü olarak işaretle).
+    func markLessonsSeen() {
+        guard !state.newLessonIds.isEmpty else { return }
+        state.newLessonIds.removeAll()
+        save()
+    }
+
     func restartAfterBankruptcy() {
         let xp = state.founderXP
         let reached = state.stageReached
@@ -1790,6 +1862,7 @@ final class GameModel: ObservableObject {
         updateRivalAggression(monthFraction) // Tepki Veren Rakip: baskıyı soldur + büyüme tetiklerine yanıt ver (health'ten ÖNCE)
         updateHealthState() // şirket sağlık durum-makinesi: state geçişlerini yakala (zincir izleme)
         checkCausalThresholds() // Faz 2: moral/runway eşik geçişinde "çünkü" çipi yay
+        evaluateLessonTriggers() // Faz 5: ilgili hata yaşandıysa Defter dersini O AN aç
         maybeCloseQuarter()
         maybeCloseSprint()
         maybeSpawnScenario()    // yeni programlı senaryo aç (aralık geçtiyse)

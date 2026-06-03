@@ -229,6 +229,7 @@ enum Balance {
         pow(arpuStageScaling, Double(stage))
     }
     static let baseChurn: Double = 0.05          // aylık churn oranı (taban)
+    static let lessonHighChurn: Double = 0.08    // Faz 5: bu churn üstünde "Churn — Sessiz Katil" dersi açılır (tabanın %60 üstü)
     static let viralFactor: Double = 0.045       // kullanıcı başına organik büyüme katkısı (geç-oyun ivmesi)
     // Satış gücü → ARPU katkısı: tavanlı (audit #17). Tavansızken geç-oyun LTV:CAC 14-73'e
     // patlıyordu (sim doğruladı); satışçı yığma baskın mikro-strateji oluyordu.

@@ -1125,3 +1125,111 @@ final class SeedDeterminismTests: XCTestCase {
     }
 }
 
+// MARK: - Faz 5: Hata-tetikli ders açılımı ("önce hata, sonra ders")
+//
+// Oyuncu ilgili HATAYI yaşadığında doğru Defter dersi O AN açılır, akışa bildirilir,
+// koleksiyona eklenir. Eşikler ekonomi formüllerini değiştirmez (öğretici katman).
+final class LessonUnlockTests: XCTestCase {
+
+    /// Crafted state + headless ilerleme: tetik mantığı tick (step) içinde koştuğundan
+    /// bir kez advanceMonthsHeadless(1) ile değerlendirmeyi tetikleriz. Unlock yapışkandır.
+    @MainActor
+    private func faultModel(_ mutate: (inout GameState) -> Void) -> GameModel {
+        SaveManager.wipe()
+        var s = GameState()
+        s.seed = 12345
+        s.profile.setupComplete = true
+        s.profile.companyName = "Nova"
+        s.profile.founderFirstName = "Ada"
+        s.profile.founderLastName = "Yılmaz"
+        mutate(&s)
+        SaveManager.save(s)
+        return GameModel()
+    }
+
+    @MainActor
+    func testMoraleLessonUnlocksWhenMoraleCritical() {
+        let m = faultModel { $0.morale = 20 }
+        m.advanceMonthsHeadless(1)
+        XCTAssertTrue(m.state.unlockedLessons.contains("morale-compounds"),
+                      "Moral kritikken 'Moral Bileşik Getiridir' açılmalı")
+    }
+
+    @MainActor
+    func testRunwayLessonUnlocksWhenRunwayCriticalAndBurning() {
+        let m = faultModel { s in
+            s.cash = 1_500
+            s.adBudgetPerMonth = 18_000   // yüksek burn, gelir ~0 → net negatif, runway < 3
+            s.users = 10
+        }
+        XCTAssertLessThan(m.runwayMonths, 3, "Test ön koşulu: runway 3 ayın altında")
+        XCTAssertLessThan(m.netPerMonth, 0, "Test ön koşulu: net negatif")
+        m.advanceMonthsHeadless(1)
+        XCTAssertTrue(m.state.unlockedLessons.contains("default-alive"),
+                      "Runway kritik + para yakarken 'Default-Alive' açılmalı")
+    }
+
+    @MainActor
+    func testEquityLessonUnlocksWhenDiluted() {
+        let m = faultModel { $0.founderEquity = 0.6 }
+        m.advanceMonthsHeadless(1)
+        XCTAssertTrue(m.state.unlockedLessons.contains("equity-not-valuation"),
+                      "Kurucu hissesi %70 altına inince 'Hisse Değerleme Değildir' açılmalı")
+    }
+
+    @MainActor
+    func testProductMilestoneAndTeamLessonsUnlock() {
+        let m = faultModel { s in
+            s.users = 150                       // pmf-feel (>=100)
+            s.headcount = [2, 0, 0, 0, 0, 0]    // hire-slow-fire-fast (members >= 2)
+        }
+        m.advanceMonthsHeadless(1)
+        XCTAssertTrue(m.state.unlockedLessons.contains("pmf-feel"),
+                      "100+ kullanıcıda 'Ürün-Pazar Uyumu' açılmalı")
+        XCTAssertTrue(m.state.unlockedLessons.contains("hire-slow-fire-fast"),
+                      "İlk çalışan alınınca 'Yavaş İşe Al, Hızlı Çıkar' açılmalı")
+    }
+
+    @MainActor
+    func testUnlockIsIdempotentAndPushesOneFeedEntry() {
+        let m = faultModel { $0.morale = 20 }
+        m.advanceMonthsHeadless(3)   // birçok tick — yine de tek kez açılmalı
+        let count = m.state.unlockedLessons.filter { $0 == "morale-compounds" }.count
+        XCTAssertEqual(count, 1, "Aynı ders birden çok kez eklenmemeli (idempotent)")
+        let feedHits = m.feedEntries.filter { $0.kind == .lesson && $0.mechanic == "morale" }.count
+        XCTAssertEqual(feedHits, 1, "Açılışta yalnızca bir feed bildirimi düşmeli")
+    }
+
+    @MainActor
+    func testNewBadgeSetThenClearedOnMarkSeen() {
+        let m = faultModel { $0.morale = 20 }
+        m.advanceMonthsHeadless(1)
+        XCTAssertTrue(m.state.newLessonIds.contains("morale-compounds"), "Açılışta 'YENİ' işaretlenmeli")
+        m.markLessonsSeen()
+        XCTAssertTrue(m.state.newLessonIds.isEmpty, "Defter görülünce 'YENİ' temizlenmeli")
+    }
+
+    @MainActor
+    func testUnlockSurvivesCodableRoundTrip() throws {
+        let m = faultModel { $0.morale = 20 }
+        m.advanceMonthsHeadless(1)
+        XCTAssertTrue(m.state.unlockedLessons.contains("morale-compounds"))
+        let data = try JSONEncoder().encode(m.state)
+        let decoded = try JSONDecoder().decode(GameState.self, from: data)
+        XCTAssertTrue(decoded.unlockedLessons.contains("morale-compounds"),
+                      "Açılan dersler kayıt/yükleme sonrası korunmalı")
+    }
+
+    @MainActor
+    func testInspectingLessonViaBridgeUnlocksItSilently() {
+        let m = faultModel { _ in }
+        XCTAssertFalse(m.state.unlockedLessons.contains("equity-not-valuation"))
+        m.inspectedMechanic = "equity"   // karar sonucu/scorecard köprüsü
+        XCTAssertTrue(m.state.unlockedLessons.contains("equity-not-valuation"),
+                      "Köprüyle görülen ders koleksiyona eklenmeli (kilitli kalmamalı)")
+        // Sessiz: köprü unlock'ı feed bildirimi DÜŞÜRMEMELİ.
+        XCTAssertFalse(m.feedEntries.contains { $0.kind == .lesson },
+                       "Köprü unlock'ı sessiz olmalı (feed'e düşmez)")
+    }
+}
+

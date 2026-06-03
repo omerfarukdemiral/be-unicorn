@@ -5,16 +5,27 @@ import SwiftUI
 /// Kart tap → açılır gövde. Stil PanelCard / CycleReviewView diline akrabadır.
 struct LessonsPanel: View {
     var theme: Theme
+    /// Açılmış (deneyimlenmiş) ders id'leri — kilitli/açık ayrımı için.
+    var unlocked: Set<String>
+    /// Bu oturumda yeni açılan dersler — "YENİ" rozeti için (kapanışta temizlenir).
+    var newIds: Set<String>
     var onClose: () -> Void
 
     @State private var selectedCategory: LessonCategory? = nil
     @State private var expandedID: String? = nil
     @State private var appeared = false
 
-    /// Filtre + tüm girdiler havuzu.
+    /// Filtre + tüm girdiler havuzu. Açılanlar üstte (koleksiyon hissi), kilitliler altta.
     private var entries: [LessonEntry] {
-        LessonsContent.filtered(by: selectedCategory)
+        LessonsContent.filtered(by: selectedCategory).sorted { a, b in
+            let ua = unlocked.contains(a.id), ub = unlocked.contains(b.id)
+            if ua != ub { return ua && !ub }   // açık olanlar önce
+            return false                        // aksi halde tanım sırası korunur
+        }
     }
+
+    private var unlockedCount: Int { LessonsContent.all.filter { unlocked.contains($0.id) }.count }
+    private var totalCount: Int { LessonsContent.all.count }
 
     var body: some View {
         ZStack {
@@ -66,6 +77,9 @@ struct LessonsPanel: View {
                 Text("Edinilen Bilgelik")
                     .font(.titleM)
                     .foregroundStyle(theme.text)
+                Text("\(unlockedCount)/\(totalCount) ders deneyimlendi")
+                    .font(.appText(12, .semibold))
+                    .foregroundStyle(theme.accent)
             }
             Spacer()
             Button { dismiss() } label: {
@@ -143,8 +157,12 @@ struct LessonsPanel: View {
                         LessonCard(
                             theme: theme,
                             entry: entry,
+                            isUnlocked: unlocked.contains(entry.id),
+                            isNew: newIds.contains(entry.id),
+                            hint: LessonsContent.unlockHint[entry.id],
                             expanded: expandedID == entry.id
                         ) {
+                            guard unlocked.contains(entry.id) else { Haptics.tap(); return }
                             Haptics.tap()
                             withAnimation(Motion.smooth) {
                                 expandedID = (expandedID == entry.id) ? nil : entry.id
@@ -161,10 +179,14 @@ struct LessonsPanel: View {
     }
 }
 
-/// Tek ders kartı — ikon + başlık + ilk satır önizleme. Tap → tam gövde açılır.
+/// Tek ders kartı. AÇIK ders: ikon + başlık + önizleme, tap → tam gövde.
+/// KİLİTLİ ders ("önce hata, sonra ders"): başlık gizli (???) + "Açmak için: <ipucu>".
 private struct LessonCard: View {
     var theme: Theme
     let entry: LessonEntry
+    let isUnlocked: Bool
+    let isNew: Bool
+    let hint: String?
     let expanded: Bool
     let onTap: () -> Void
 
@@ -180,47 +202,71 @@ private struct LessonCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: Space.s2) {
                 HStack(alignment: .top, spacing: Space.s3) {
-                    Image(systemName: entry.category.icon)
+                    Image(systemName: isUnlocked ? entry.category.icon : "lock.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(theme.accent)
+                        .foregroundStyle(isUnlocked ? theme.accent : theme.subtle)
                         .frame(width: 30, height: 30)
                         .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.s))
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.category.title.uppercased())
-                            .font(.caption).kerning(0.8)
-                            .foregroundStyle(theme.subtle)
-                        Text(entry.title)
+                        HStack(spacing: Space.s2) {
+                            Text(entry.category.title.uppercased())
+                                .font(.caption).kerning(0.8)
+                                .foregroundStyle(theme.subtle)
+                            if isNew {
+                                Text("YENİ")
+                                    .font(.appText(9, .bold)).kerning(0.5)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(theme.accent, in: Capsule())
+                            }
+                        }
+                        Text(isUnlocked ? entry.title : "???")
                             .font(.appText(15, .bold))
-                            .foregroundStyle(theme.text)
+                            .foregroundStyle(isUnlocked ? theme.text : theme.subtle)
                             .multilineTextAlignment(.leading)
                     }
 
                     Spacer(minLength: 0)
 
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(theme.subtle)
-                        .padding(.top, 4)
+                    if isUnlocked {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(theme.subtle)
+                            .padding(.top, 4)
+                    }
                 }
 
-                if expanded {
-                    Text(entry.body)
-                        .font(.bodyText)
-                        .foregroundStyle(theme.textSecondary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text(preview)
-                        .font(.bodyText)
-                        .foregroundStyle(theme.subtle)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                if isUnlocked {
+                    if expanded {
+                        Text(entry.body)
+                            .font(.bodyText)
+                            .foregroundStyle(theme.textSecondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text(preview)
+                            .font(.bodyText)
+                            .foregroundStyle(theme.subtle)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                } else if let hint {
+                    // Kilitli: hangi hatayla açılacağını göster (öğretici yönlendirme).
+                    HStack(spacing: Space.s1) {
+                        Image(systemName: "key.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Açmak için: \(hint)")
+                            .font(.appText(12, .semibold))
+                            .multilineTextAlignment(.leading)
+                    }
+                    .foregroundStyle(theme.subtle)
                 }
             }
             .padding(Space.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(theme.surfaceHigh, in: RoundedRectangle(cornerRadius: Radius.m))
+            .opacity(isUnlocked ? 1 : 0.7)
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.m)
                     .stroke(expanded ? theme.hairlineStrong : theme.hairline,
