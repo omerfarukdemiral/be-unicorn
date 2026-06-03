@@ -2253,7 +2253,8 @@ final class GameModel: ObservableObject {
         // D2 (#5): arka plana alınırken nazik hatırlatmaları planla (baskısız).
         // streak-risk yalnız korunacak bir seri varsa planlanır; ayrıca ~24sa dönüş daveti.
         // İzin yoksa no-op (status kontrollü).
-        NotificationManager.scheduleReminders(streak: state.streak, dailyCompleted: state.dailyCompleted)
+        NotificationManager.scheduleReminders(streak: state.streak, dailyCompleted: state.dailyCompleted,
+                                              runwayMonths: runwayMonths)
     }
 
     func refreshOnForeground() {

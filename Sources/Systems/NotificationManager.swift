@@ -21,6 +21,12 @@ enum NotificationManager {
     // Bildirim kimlikleri (yeniden planlamada eskisini deduplike etmek için sabit).
     private static let streakRiskID = "unicorn.streakRisk"
     private static let comebackID   = "unicorn.comeback"
+    private static let runwayID     = "unicorn.runwayCritical"
+
+    /// Runway bu eşiğin altındaysa "durum-duyarlı" acil-ama-yardımcı hatırlatma planlanır.
+    private static let runwayCriticalMonths: Double = 3
+    /// Runway hatırlatması ~4 saat sonra: dönüp hamle yapmaya değer ama yapay aciliyet değil.
+    private static let runwayInterval: TimeInterval = 4 * 60 * 60
 
     private static var center: UNUserNotificationCenter { .current() }
 
@@ -51,14 +57,19 @@ enum NotificationManager {
     /// `hasStreakToProtect`: oyuncunun bugün henüz tamamlanmamış ama korunacak
     /// bir streak'i var mı (streak > 0 && !dailyCompleted). `false` ise streak
     /// bildirimi PLANLANMAZ — sadece dönüş daveti kalır.
-    static func scheduleReminders(streak: Int, dailyCompleted: Bool) {
+    /// `runwayMonths`: arka plana alındığı andaki pist (ay). Kritik eşiğin altındaysa
+    /// streak yerine durum-duyarlı runway hatırlatması önceliklenir (en anlamlı tetik).
+    static func scheduleReminders(streak: Int, dailyCompleted: Bool, runwayMonths: Double) {
         authorizationStatus { status in
             guard status == .authorized || status == .provisional else { return }
             // Önce eskileri temizle (üst üste binmeyi önle).
             cancelAll()
 
-            let hasStreakToProtect = streak > 0 && !dailyCompleted
-            if hasStreakToProtect {
+            // Durum-duyarlı tek "öncelikli" hatırlatma (spam yok): runway kritik > streak-risk.
+            // Baseline dönüş daveti (comeback) her durumda kalır → en fazla 2 bildirim.
+            if runwayMonths.isFinite && runwayMonths < runwayCriticalMonths {
+                scheduleRunwayCritical(months: runwayMonths)
+            } else if streak > 0 && !dailyCompleted {
                 scheduleStreakRisk(streak: streak)
             }
             scheduleComeback()
@@ -67,7 +78,7 @@ enum NotificationManager {
 
     /// Foreground'a dönünce çağrılır: bekleyen tüm planlı bildirimleri iptal et.
     static func cancelAll() {
-        center.removePendingNotificationRequests(withIdentifiers: [streakRiskID, comebackID])
+        center.removePendingNotificationRequests(withIdentifiers: [streakRiskID, comebackID, runwayID])
     }
 
     // MARK: - Yardımcılar
@@ -91,6 +102,21 @@ enum NotificationManager {
         let interval = max(1, fireDate.timeIntervalSince(now))
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
         center.add(UNNotificationRequest(identifier: streakRiskID, content: content, trigger: trigger))
+    }
+
+    /// Runway kritik: ~4 saat sonra durum-duyarlı, YARDIMCI hatırlatma. Ton bilgilendirici
+    /// ("dönüp hamle yapmak iyi olur") — "X saat içinde batacaksın" karanlık deseni YOK.
+    private static func scheduleRunwayCritical(months: Double) {
+        let content = UNMutableNotificationContent()
+        content.title = "Pistin daralıyor"
+        let m = max(0, Int(months.rounded()))
+        content.body = m > 0
+            ? "Yaklaşık \(m) aylık pist kaldı. Dönüp küçük bir hamle (gideri kıs ya da tur topla) pisti uzatabilir."
+            : "Pist çok kısaldı. Dönüp bir hamle yapmak iyi olabilir — gideri kıs ya da tur topla."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: runwayInterval, repeats: false)
+        center.add(UNNotificationRequest(identifier: runwayID, content: content, trigger: trigger))
     }
 
     /// D1 inaktivite dönüş daveti: ~24 saat sonra "kaldığın yerden devam".
