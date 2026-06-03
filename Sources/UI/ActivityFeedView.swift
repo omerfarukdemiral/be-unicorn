@@ -133,6 +133,11 @@ private struct FeedDetailSheet: View {
                         seasonDetail(f)
                     }
 
+                    // #8 Yansıma — karar sonrası "bu seçim neyi önceliklendirdi?" (suçlamasız).
+                    if let reflection = entry.reflection {
+                        reflectionBlock(reflection)
+                    }
+
                     // Ders köprüsü — varsa net bir buton (#19), önce sheet kapanır.
                     if let lesson = relatedLesson, let mech = entry.mechanic {
                         lessonBridge(lesson.title, mech)
@@ -162,6 +167,24 @@ private struct FeedDetailSheet: View {
                     .font(.appText(11, .medium)).foregroundStyle(theme.textQuaternary)
             }
         }
+    }
+
+    /// #8 Yansıma kartı — kararın hangi dengeyi önceliklendirdiğini betimler (yargı yok).
+    private func reflectionBlock(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: Space.s2) {
+            HStack(spacing: Space.s1 + 2) {
+                Image(systemName: "scope")
+                    .font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.gold)
+                Text("YANSIMA").font(.eyebrow).kerning(0.8).foregroundStyle(theme.subtle)
+            }
+            Text(text).font(.appText(13, .medium)).foregroundStyle(theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Space.s3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.m))
+        .overlay(RoundedRectangle(cornerRadius: Radius.m).stroke(Palette.gold.opacity(0.25), lineWidth: 1))
+        .padding(.top, Space.s2)
     }
 
     private func lessonBridge(_ title: String, _ mechanic: String) -> some View {

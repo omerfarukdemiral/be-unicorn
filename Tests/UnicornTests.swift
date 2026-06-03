@@ -1407,3 +1407,55 @@ final class P2PolishTests: XCTestCase {
     }
 }
 
+// MARK: - #8 Karar yansıması (suçlamasız) — DecisionSystem.reflection
+
+final class DecisionReflectionTests: XCTestCase {
+
+    // seed-termsheet ruhu: A = daha çok nakit + daha çok dilution, B = daha çok itibar/moral.
+    private var cashHeavy: DecisionChoice {
+        DecisionChoice("A", effects: [.cash(500_000), .equity(-0.18), .reputation(4), .moraleTargetBonus(-1)])
+    }
+    private var reputationHeavy: DecisionChoice {
+        DecisionChoice("B", effects: [.cash(300_000), .equity(-0.12), .reputation(10), .moraleTargetBonus(2)])
+    }
+
+    func testReflectionEmphasizesChosenDimensionAndAltFocus() {
+        let r = DecisionSystem.reflection(chosen: cashHeavy, among: [cashHeavy, reputationHeavy])
+        XCTAssertNotNil(r)
+        // Görece fark: nakit-ağır seçim "nakit" tarafına yaslanır, alternatif "itibar" odaklıdır.
+        XCTAssertTrue(r!.contains("nakit"), "Vurgu nakit olmalı: \(r!)")
+        XCTAssertTrue(r!.contains("itibar"), "Alternatif odağı itibar olmalı: \(r!)")
+    }
+
+    func testReflectionIsSymmetricForOppositeChoice() {
+        let r = DecisionSystem.reflection(chosen: reputationHeavy, among: [cashHeavy, reputationHeavy])
+        XCTAssertNotNil(r)
+        // İtibar-ağır seçimde vurgu/alt yer değiştirir.
+        XCTAssertTrue(r!.contains("itibar"), "Vurgu itibar olmalı: \(r!)")
+        XCTAssertTrue(r!.contains("nakit"), "Alternatif odağı nakit olmalı: \(r!)")
+    }
+
+    func testReflectionIsBlameFree() {
+        let r = DecisionSystem.reflection(chosen: cashHeavy, among: [cashHeavy, reputationHeavy]) ?? ""
+        // Yargı içermez: "yanlış/optimal/hata/kötü" geçmemeli; "geçerli bir denge" çerçevesi taşır.
+        for judgmental in ["yanlış", "optimal", "hata", "kötü"] {
+            XCTAssertFalse(r.lowercased().contains(judgmental), "Yansıma yargısız olmalı, '\(judgmental)' geçti: \(r)")
+        }
+        XCTAssertTrue(r.contains("geçerli"), "Suçlamasız çerçeve beklenir: \(r)")
+    }
+
+    func testSingleChoiceYieldsNoReflection() {
+        let solo = DecisionChoice("tek", effects: [.cash(1_000)])
+        XCTAssertNil(DecisionSystem.reflection(chosen: solo, among: [solo]),
+                     "Tek seçenekli kartta yansıma olmamalı")
+    }
+
+    func testNearIdenticalChoicesYieldNoReflection() {
+        // İki seçim de aynı dengeyse anlamlı kontrast yok → nil (gürültü yapmaz).
+        let a = DecisionChoice("a", effects: [.morale(3)])
+        let b = DecisionChoice("b", effects: [.morale(3)])
+        XCTAssertNil(DecisionSystem.reflection(chosen: a, among: [a, b]),
+                     "Ayrışmayan seçimlerde yansıma olmamalı")
+    }
+}
+

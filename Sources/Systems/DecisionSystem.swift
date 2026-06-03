@@ -176,6 +176,78 @@ enum DecisionSystem {
                             once: card.once, trigger: card.trigger, choices: newChoices)
     }
 
+    // MARK: - #8 Karar yansıması (suçlamasız koçluk)
+
+    /// Bir seçimi boyutlara indiren içsel temsil. Etki türleri farklı ölçeklerde (nakit binlerce,
+    /// moral 0-100, hisse 0-1) olduğundan kaba ağırlıklarla karşılaştırılabilir hale getirilir.
+    /// Bu skorlar YALNIZCA betimleme içindir — oyuncuya sayı gösterilmez, "optimal" iddiası YOK.
+    enum ReflectDim: Hashable {
+        case cash, users, morale, reputation, equity, capacity
+        /// Yalın (nominatif) ad — cümle içinde "… tarafına yaslandı" kalıbıyla uyumlu.
+        var noun: String {
+            switch self {
+            case .cash:       return "nakit"
+            case .users:      return "kullanıcı büyümesi"
+            case .morale:     return "ekip morali"
+            case .reputation: return "itibar"
+            case .equity:     return "hisse kontrolü"
+            case .capacity:   return "ekip kapasitesi"
+            }
+        }
+    }
+
+    private static func dimensionScores(_ effects: [DecisionEffect]) -> [ReflectDim: Double] {
+        var d: [ReflectDim: Double] = [:]
+        func add(_ dim: ReflectDim, _ v: Double) { d[dim, default: 0] += v }
+        for e in effects {
+            switch e {
+            case .cash(let v):              add(.cash, v / 1000)
+            case .cashPercent(let p):       add(.cash, p * 10)
+            case .users(let v):             add(.users, v / 100)
+            case .usersPercent(let p):      add(.users, p * 12)
+            case .morale(let v):            add(.morale, v / 4)
+            case .moraleTargetBonus(let v): add(.morale, v / 3)
+            case .reputation(let v):        add(.reputation, v / 3)
+            case .equity(let v):            add(.equity, v * 25)
+            case .headcount(_, let delta):  add(.capacity, Double(delta) * 2)
+            }
+        }
+        return d
+    }
+
+    private static let allReflectDims: [ReflectDim] = [.cash, .users, .morale, .reputation, .equity, .capacity]
+
+    /// Karar sonrası "bu seçim neyi önceliklendirdi?" yansıması. YARGI YOK (optimal/yanlış demez).
+    /// Seçilen yolu, skor vektörü en çok AYRIŞAN alternatife göre kıyaslar: hangi boyutta ondan
+    /// ayrıldığını (vurgu) ve hangi boyutu geri plana attığını (alternatifin odağı) betimler.
+    /// Mutlak ölçek yerine GÖRELİ fark kullanılır — benzer boyutlar (delta≈0) elenir, gerçek
+    /// trade-off yüzeye çıkar. Tek-seçimli kartta / anlamlı kontrast yoksa nil (gürültü yapmaz).
+    static func reflection(chosen: DecisionChoice, among choices: [DecisionChoice]) -> String? {
+        let others = choices.filter { $0.label != chosen.label }
+        guard !others.isEmpty else { return nil }
+        let cs = dimensionScores(chosen.effects)
+
+        // En zıt alternatif: skor vektörü en uzak (kareler toplamı en büyük) seçim.
+        func divergence(_ o: DecisionChoice) -> Double {
+            let os = dimensionScores(o.effects)
+            return allReflectDims.reduce(0) { acc, dim in
+                let d = (cs[dim] ?? 0) - (os[dim] ?? 0); return acc + d * d
+            }
+        }
+        guard let alt = others.max(by: { divergence($0) < divergence($1) }), divergence(alt) > 0.5 else { return nil }
+        let asc = dimensionScores(alt.effects)
+        let deltas = allReflectDims.map { (dim: $0, d: (cs[$0] ?? 0) - (asc[$0] ?? 0)) }
+
+        guard let emphasis = deltas.max(by: { $0.d < $1.d }), emphasis.d > 0.5 else { return nil }
+        // Alternatifin odağı = chosen'ın en çok geri attığı boyut (ek getirmeyen kalıp; ek-uyumu güvenli).
+        let altFocus = deltas.min(by: { $0.d < $1.d }).flatMap { ($0.d < -0.5 && $0.dim != emphasis.dim) ? $0.dim : nil }
+
+        var line = "Bu seçim, alternatife kıyasla \(emphasis.dim.noun) tarafına yaslandı."
+        if let altFocus { line += " Diğer yol ise \(altFocus.noun) odağındaydı." }
+        line += " İkisi de geçerli bir denge — şirketin o an neye ihtiyacı vardı?"
+        return line
+    }
+
     /// Karar havuzu geçici olarak boşaldığında gösterilen nötr fallback kartı.
     /// Etkisi sıfıra yakın (ekonomiyi bozmaz), ama eğitici bir mentor mesajı taşır —
     /// oyuncu "bekleme/ölü an" yaşamaz. Birkaç varyanttan rastgele biri seçilir.

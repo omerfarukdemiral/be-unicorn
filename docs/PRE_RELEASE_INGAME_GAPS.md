@@ -53,12 +53,12 @@
 | ~~5~~ | ~~Welcome-back ekranı (Faz 6)~~ | ✅ Keşif: `OfflineReportView`+struct+`pendingOfflineReport` ZATEN kuruluydu — sadece bağlandı (1sa+ eşik `offlineReportMinSeconds`) |
 | ~~6~~ | ~~Defter "yeni ders" rozeti~~ | ✅ ControlDock Defter butonunda `newLessonIds` sayaç rozeti; Defter açılınca `markLessonsSeen` temizler |
 
-### P3 — İçerik/ses derinliği
+### P3 — İçerik/ses derinliği — ✅ TAMAMLANDI (2026-06-03)
 
-| # | Eksik | Neden önemli | Tahmini iş | Dokunulacak |
-|---|-------|--------------|:---:|---|
-| 7 | **Müzik & SFX zenginliği** — `AudioManager` var ama içerik kapsamı gözden geçirilmeli | His/cila; sessiz oyun retention'ı düşürür | Orta | `AudioManager`, asset'ler |
-| 8 | **Öğrenme döngüsü derinleştirme (Faz 5 stretch)** — "bu seçim optimal miydi?" yansıtma kartı; karar-sonrası ders köprüsü zenginleştirme | "Önce hata, sonra ders" tam kapanış | Orta | `LessonBridgeViews`, `resolve()` |
+| # | Eksik | Durum |
+|---|-------|---|
+| ~~7~~ | ~~Müzik & SFX zenginliği~~ | ✅ Keşif: `AudioManager`+8 SFX+müzik+`Feedback` ZATEN production-ready, yeni asset gerekmez. Eklenen: **sessiz olaylara ses kapsamı** (fire→warning, modül→tap, senaryo sonucu→success/warning) — mevcut SFX'leri yeniden kullanır |
+| ~~8~~ | ~~Öğrenme döngüsü derinleştirme~~ | ✅ Counterfactual **"Yansıma"** — `DecisionSystem.reflection`: "Bu seçim X tarafına yaslandı, Y ödün vererek. Diğer yol Z odağındaydı. İkisi de geçerli — şirketin o an neye ihtiyacı vardı?" (verdict DEĞİL; DNA "tek doğru cevap yok"a uygun). Feed detayında `reflectionBlock` |
 
 ---
 

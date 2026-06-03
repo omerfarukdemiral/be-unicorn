@@ -45,9 +45,10 @@ final class GameModel: ObservableObject {
     /// pending* modal yayını yerine bunu çağır — retention mutasyonları (sayaç/ödül) AYNEN kalır.
     func pushFeed(_ kind: FeedKind, _ title: String, _ summary: String,
                   positive: Bool = true, mechanic: String? = nil,
-                  detail: FeedDetailKind? = nil) {
+                  detail: FeedDetailKind? = nil, reflection: String? = nil) {
         let e = FeedEntry(kind: kind, title: title, summary: summary, atMonth: state.months,
-                          positive: positive, mechanic: mechanic, detail: detail)
+                          positive: positive, mechanic: mechanic, detail: detail,
+                          reflection: reflection)
         state.feed.insert(e, at: 0)
         if state.feed.count > 30 { state.feed = Array(state.feed.prefix(30)) }
         state.feedUnread += 1
@@ -700,6 +701,7 @@ final class GameModel: ObservableObject {
         emitCausal("person.fill.badge.minus",
                    "Ekip küçüldü → aylık gider düştü, runway \(rText)",
                    netPerMonth >= 0 ? .good : .warn)
+        Feedback.warning()   // kayıp aksiyonu — işe alımın (tap) simetriği
         save()
         return true
     }
@@ -726,6 +728,7 @@ final class GameModel: ObservableObject {
         state.cash -= c
         emitCashDelta(-c)
         state.moduleLevels[i] += 1
+        Feedback.tap()   // modül yükseltme satın alındı (işe alımla aynı dil)
         save()
         return true
     }
@@ -1482,6 +1485,7 @@ final class GameModel: ObservableObject {
         pushFeed(.scenario, success ? "\(s.scenarioKind.displayName): Hedef Tuttu" : "\(s.scenarioKind.displayName): Kaçtı",
                  success ? "Başardın. \(rewardHint)" : "Bu sefer olmadı — sonraki fırsata.",
                  positive: success)
+        if success { Feedback.success() } else { Feedback.warning() }   // 2-3 aylık anlatı olayı sessiz kalmasın
         state.scenarios.removeAll { $0.id == s.id }
         save()
     }
@@ -1561,8 +1565,12 @@ final class GameModel: ObservableObject {
         // gösterilir + "ilgili ders" köprüsü taşır (en zengin eğitici içerik korunur).
         // Track C: karar sonucu artık MODAL değil → AKIŞA düşer (ders köprüsü mechanic ile korunur).
         if let line = choice.resultLine {
+            // #8: suçlamasız yansıma — bu seçim neyi önceliklendirdi, alternatif neyi.
+            // Detay-sheet'te "Yansıma" bloğu olarak görünür (yargı yok, koçluk).
+            let reflection = DecisionSystem.reflection(chosen: choice, among: card.choices)
             pushFeed(.decision, "Kararın Sonucu", line,
-                     positive: true, mechanic: card.category.lessonMechanic)
+                     positive: true, mechanic: card.category.lessonMechanic,
+                     reflection: reflection)
         }
         if wasFirstDecision {
             pendingToast = NarrativeContent.firstDecisionPraise   // ilk-karar tebriği kısa toast (tek sefer)

@@ -11,6 +11,7 @@ struct FeedEntry: Codable, Identifiable, Equatable {
     var positive: Bool = true       // tint yönü (success vs warning); nötr için kind belirler
     var mechanic: String? = nil     // #19 ders köprüsü (varsa "detay >" derse gider)
     var detailKindRaw: Int? = nil   // zengin detay-sheet payload anahtarı (çeyrek/sezon); nil = köprü yok
+    var reflection: String? = nil   // #8 karar yansıması (suçlamasız "neyi önceliklendirdin?")
     var read: Bool = false          // HUD okunmamış rozeti için
 
     init(from decoder: Decoder) throws {
@@ -26,13 +27,16 @@ struct FeedEntry: Codable, Identifiable, Equatable {
         positive = g(.positive, true)
         mechanic = (try? c.decodeIfPresent(String.self, forKey: .mechanic)) ?? nil
         detailKindRaw = (try? c.decodeIfPresent(Int.self, forKey: .detailKindRaw)) ?? nil
+        reflection = (try? c.decodeIfPresent(String.self, forKey: .reflection)) ?? nil
         read = g(.read, false)
     }
     init(kind: FeedKind, title: String, summary: String, atMonth: Double,
-         positive: Bool = true, mechanic: String? = nil, detail: FeedDetailKind? = nil) {
+         positive: Bool = true, mechanic: String? = nil, detail: FeedDetailKind? = nil,
+         reflection: String? = nil) {
         self.kindRaw = kind.rawValue; self.title = title; self.summary = summary
         self.atMonth = atMonth; self.positive = positive; self.mechanic = mechanic
         self.detailKindRaw = detail?.rawValue
+        self.reflection = reflection
     }
     var kind: FeedKind { FeedKind(rawValue: kindRaw) ?? .info }
 }
