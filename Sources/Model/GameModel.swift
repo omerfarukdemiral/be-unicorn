@@ -113,6 +113,12 @@ final class GameModel: ObservableObject {
         } else {
             state = GameState()
         }
+        // Test/QA: --screenshot <preset> → App Store görseli için kurulu durum enjekte et
+        // (kayıt yüklendikten sonra ezer; yalnız manuel argümanla çalışır, kalıcılaştırılmaz).
+        let scArgs = ProcessInfo.processInfo.arguments
+        if let i = scArgs.firstIndex(of: "--screenshot"), i + 1 < scArgs.count {
+            state = Self.screenshotPreset(scArgs[i + 1])
+        }
         // Şimdilik para birimi yalnızca dolar — seçici kapalı (kullanıcı isteği).
         // Eski kayıtlarda ₺/€ seçilmiş olsa bile görüntü dolara sabitlenir.
         state.currency = .usd
@@ -1913,6 +1919,67 @@ final class GameModel: ObservableObject {
         inspectedMechanic = nil; inspectedDept = nil; pendingOfflineReport = nil; pendingToast = nil
         scheduleNextDecision()
         save()
+    }
+
+    // MARK: - Ekran görüntüsü presetleri (yalnız --screenshot, App Store görselleri için)
+
+    /// App Store ekran görüntüleri için kurulu bir GameState üretir. Onboarding/kuruluş/
+    /// splash atlanır; metrikler evreye göre gerçekçi seçilir. Kalıcılaştırılmaz.
+    static func screenshotPreset(_ name: String) -> GameState {
+        var s = GameState()
+        s.hasSeenOnboarding = true
+        s.hasSeenFirstGoalSplash = true
+        s.currency = .usd
+        s.profile = CompanyProfile(founderFirstName: "Ada", founderLastName: "Yılmaz",
+                                   companyName: "Nimbus", sector: 0, setupComplete: true)
+
+        func team(_ counts: [Int]) -> [TeamMember] {
+            let fn = ["Ada","Kerem","Defne","Mert","Elif","Can","Zeynep","Ali","Naz","Ege",
+                      "Su","Deniz","Arda","Lara","Yusuf","Ceren","Onur","Eda","Burak","Sena","Tuna","Mira"]
+            let ln = ["Yılmaz","Demir","Kaya","Şahin","Çelik","Aydın","Öztürk","Arslan"]
+            var out: [TeamMember] = []; var k = 0
+            for (dept, n) in counts.enumerated() {
+                for _ in 0..<n {
+                    out.append(TeamMember(firstName: fn[k % fn.count], lastName: ln[k % ln.count],
+                                          deptIndex: dept, skillLevel: (k % 5) + 1, joinedMonth: 0,
+                                          isFounder: k == 0))
+                    k += 1
+                }
+            }
+            return out
+        }
+        func liveProject() -> [ProjectState] {
+            [ProjectState(name: "Nimbus", category: 0, startMonth: 0, devProgress: 1.0, isLive: true)]
+        }
+        func modules(_ lvl: Int) -> [Int] { Array(repeating: lvl, count: Balance.modules.count) }
+
+        switch name {
+        case "garage":
+            s.stage = 0; s.cash = 8_200; s.users = 140; s.reputation = 30; s.morale = 72
+            s.months = 4; s.headcount = [1, 0, 1, 0, 0]; s.members = team([1, 0, 1, 0, 0])
+            s.projects = liveProject()
+        case "growth":
+            s.stage = 3; s.cash = 1_250_000; s.users = 86_000; s.reputation = 64; s.morale = 78
+            s.months = 22; s.adBudgetPerMonth = 40_000
+            s.headcount = [4, 2, 3, 2, 1]; s.members = team([4, 2, 3, 2, 1])
+            s.moduleLevels = modules(1); s.projects = liveProject()
+        case "team":
+            s.stage = 4; s.cash = 6_800_000; s.users = 410_000; s.reputation = 72; s.morale = 80
+            s.months = 34; s.adBudgetPerMonth = 120_000
+            s.headcount = [7, 3, 5, 3, 2]; s.members = team([7, 3, 5, 3, 2])
+            s.moduleLevels = modules(2); s.projects = liveProject()
+        case "unicorn":
+            s.stage = 6; s.cash = 120_000_000; s.users = 6_400_000; s.reputation = 92; s.morale = 88
+            s.months = 58; s.adBudgetPerMonth = 900_000
+            s.headcount = [16, 7, 11, 8, 5]; s.members = team([16, 7, 11, 8, 5])
+            s.moduleLevels = modules(4); s.projects = liveProject()
+        default:
+            break
+        }
+        s.stageReached = s.stage
+        s.peakUsers = s.users
+        s.peakReputation = s.reputation
+        return s
     }
 
     // MARK: - Döngü
