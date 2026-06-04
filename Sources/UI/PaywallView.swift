@@ -25,7 +25,7 @@ struct PaywallView: View {
 
     @State private var appeared = false
 
-    private var priceText: String { store.displayPrice ?? "₺99" }   // lansman fiyatı (fallback)
+    private var priceText: String { store.displayPrice ?? "₺199" }   // lansman fiyatı (fallback; gerçek fiyat App Store'dan gelir)
 
     var body: some View {
         ZStack {
