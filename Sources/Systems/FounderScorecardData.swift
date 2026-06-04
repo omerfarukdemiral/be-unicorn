@@ -97,12 +97,12 @@ enum FounderScorecardData {
     /// Boş ders durumunda jenerik içgörü cümlesine düşer.
     static func shareText(lessons: [LessonEntry], identity: FounderIdentity) -> String {
         if lessons.isEmpty {
-            return "Unicorn'da bir startup kurdum ve denemeye devam ediyorum. Strateji kimliğim: \(identity.title). — Garajdan Zirveye"
+            return "Be Unicorn'da bir startup kurdum ve denemeye devam ediyorum. Strateji kimliğim: \(identity.title). — Garajdan Zirveye"
         }
         let titles = lessons.prefix(3).enumerated()
             .map { "\($0.offset + 1)) \($0.element.title)" }
             .joined(separator: " ")
-        return "Unicorn'da bu oyunda öğrendiğim en pahalı 3 ders: \(titles). Strateji kimliğim: \(identity.title). — Garajdan Zirveye"
+        return "Be Unicorn'da bu oyunda öğrendiğim en pahalı 3 ders: \(titles). Strateji kimliğim: \(identity.title). — Garajdan Zirveye"
     }
 
     /// Yeterli karar verilmediğinde gösterilecek suçlamasız fallback.

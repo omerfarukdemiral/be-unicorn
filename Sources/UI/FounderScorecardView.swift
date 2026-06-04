@@ -40,9 +40,9 @@ struct FounderScorecardView: View {
     private var shareText: String {
         let titles = topLessons.map { $0.lesson.title }
         if titles.isEmpty {
-            return "Unicorn — Garajdan Zirveye'de bir kurucu olarak oynadım. Strateji kimliğim: \(identity.title)."
+            return "Be Unicorn — Garajdan Zirveye'de bir kurucu olarak oynadım. Strateji kimliğim: \(identity.title)."
         }
-        var lines = "Unicorn'da bu oyunda öğrendiğim en pahalı dersler:"
+        var lines = "Be Unicorn'da bu oyunda öğrendiğim en pahalı dersler:"
         for (i, t) in titles.enumerated() {
             lines += "\n\(i + 1)) \(t)"
         }

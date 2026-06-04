@@ -38,7 +38,7 @@ struct SettingsView: View {
                     section("HESAP") {
                         resetRow
                     }
-                    Text("Unicorn — Garajdan Zirveye · v1.0")
+                    Text("Be Unicorn — Garajdan Zirveye · v1.0")
                         .font(.labelText).foregroundStyle(theme.subtle)
                         .padding(.top, Space.s2)
                     Spacer(minLength: Space.s5)

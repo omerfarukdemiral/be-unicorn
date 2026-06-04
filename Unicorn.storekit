@@ -9,12 +9,12 @@
       "localizations" : [
         {
           "description" : "Series A'dan Unicorn'a uzanan yolculuğun tamamını aç: tüm funding turları, geç-oyun karar kartları ve büyüyen Defter dersleri. Tek seferlik ödeme, abonelik yok, reklamsız.",
-          "displayName" : "Unicorn Tam Sürüm",
+          "displayName" : "Be Unicorn Tam Sürüm",
           "locale" : "tr"
         },
         {
           "description" : "Unlock the full journey from Series A to Unicorn: every funding round, late-game decision cards, and the growing Notebook of lessons. One-time purchase, no subscription, ad-free.",
-          "displayName" : "Unicorn Full Version",
+          "displayName" : "Be Unicorn Full Version",
           "locale" : "en_US"
         }
       ],
